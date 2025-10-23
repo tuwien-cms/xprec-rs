@@ -1,6 +1,23 @@
 [package]
 name = "xprec"
 version = "0.1.0"
+authors = [
+    "Markus Wallerberger <markus.wallerberger@tuwien.ac.at>"
+    ]
+description = "Fast emulated quadruple (double-double) precision arithmetic"
+keywords = [
+    "math",
+    "precision",
+    "numerics"
+    ]
+categories = [
+    "algorithms",
+    "mathematics",
+    "science"
+    ]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/tuwien-cms/xprec-rs"
 edition = "2024"
 
 [dependencies]
