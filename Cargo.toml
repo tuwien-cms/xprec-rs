@@ -19,6 +19,10 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/tuwien-cms/xprec-rs"
 edition = "2024"
+exclude = [
+    "notebooks/",
+    ".github/",
+    ]
 
 [dependencies]
 libm = "0.2"
