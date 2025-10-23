@@ -7,7 +7,7 @@ pub struct d64 {
     lo: f64
 }
 
-/// Compensated arithmetic.
+/// Arithmetic with compensated errors.
 ///
 /// This trait marks a type as a compensated arithmetic type. It maintains the
 /// result of an arithmetic operation plus a compensate, which is the
@@ -16,24 +16,27 @@ pub struct d64 {
 ///
 /// The following operations are required:
 ///
-///  | (op)     | method                        | Also known as | Exact? |
-///  |----------|-------------------------------|---------------|--------|
-///  | a + b    | Self::compensated_sum(a, b)   | 2sum(a, b)    | yes    |
-///  | a - b    | Self::compensated_diff(a, b)  | 2diff(a, b)   | yes    |
-///  | a * b    | Self::compensated_prod(a, b)  | 2prod(a, b)   | yes    |
-///  | a / b    | Self::compensated_ratio(a, b) |               | no     |
-///  | a.sqrt() | Self::compensated_sqrt(a, b)  |               | no     |
-///
-/// WARNING: Compensated arithmetic is not guaranteed to conform to IEEE 754
-/// rules when it comes to infinities. One usually gets NaN in this case.
+///  | (op)       | method                      | Also known as | Exact? |
+///  |------------|-----------------------------|---------------|--------|
+///  | `a + b`    | `::compensated_sum(a, b)`   | 2sum(a, b)    | yes    |
+///  | `a - b`    | `::compensated_diff(a, b)`  | 2diff(a, b)   | yes    |
+///  | `a * b`    | `::compensated_prod(a, b)`  | 2prod(a, b)   | yes    |
+///  | `a / b`    | `::compensated_ratio(a, b)` |               | no     |
+///  | `a.sqrt()` | `::compensated_sqrt(a, b)`  |               | no     |
 ///
 /// For sum and difference, there are `unsafe` versions, which may be faster
 /// because they may assume that the arguments are ordered by magnitude, i.e,
-/// `a.abs() >= b.abs()`. Usually, this constraint can be slightly relaxed:
-/// it is sufficient that:
+/// `a.abs() >= b.abs()`. This constraint can be slightly relaxed.[^1]
 ///
-///   exponent(a) + trailing_zeros(mantissa_bits(a)) >= exponent(b)
+///  | (op)    | unsafe method                   | Also known as     | Exact? |
+///  |---------|---------------------------------|-------------------|--------|
+///  | `a + b` | `::compensated_fast_sum(a, b)`  | fast2sum(a, b)    | yes*   |
+///  | `a - b` | `::compensated_fast_diff(a, b)` | fast2diff(a, b)   | yes*   |
 ///
+/// **Warning**: Compensated arithmetic is not guaranteed to conform to IEEE
+/// rules when it comes to infinities. One usually gets NaN in this case.
+///
+/// [^1]: J.-M. Muller and L. Rideau, ACM Trans. Math. Softw. 48, 1, 9 (2022).
 pub trait CompensatedArithmetic<T> : From<T> + Into<T>
 {
     /// type of the compensate.
@@ -88,7 +91,7 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     /// condition can be slightly relaxed.). On floating point numbers, this is
     /// known as Kahan summation or "fast2sum".
     ///
-    /// SAFETY: you must make sure that large is indeed the larger number.
+    /// **Safety**: you must make sure that large is indeed the larger number.
     unsafe fn compensated_fast_sum(large: T, small: T) -> Self {
         return Self::compensated_sum(large, small);
     }
@@ -100,7 +103,7 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     /// larger magnitude than `b`. (For double-double arithmetic, this
     /// condition can be slightly relaxed.).
     ///
-    /// SAFETY: you must make sure that large is indeed the larger number.
+    /// **Safety**: you must make sure that large is indeed the larger number.
     unsafe fn compensated_fast_diff(large: T, small: T) -> Self {
         return Self::compensated_diff(large, small);
     }
