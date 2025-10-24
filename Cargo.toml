@@ -1,6 +1,6 @@
 [package]
 name = "xprec"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     "Markus Wallerberger <markus.wallerberger@tuwien.ac.at>"
     ]
