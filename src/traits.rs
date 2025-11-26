@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 use super::Df64;
-use super::{AddFast, CompensatedArithmetic, SubFast};
+use super::{
+    AddFast, CompensatedArithmetic, CompensatedAdd, CompensatedSub,
+    CompensatedMul, CompensatedDiv, CompensatedSqrt, SubFast};
 use super::{arith, checks, circular, consts, exp, funcs, hyperbolic, roots, round};
 use num_traits::{Inv, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf, SupersetOf};
@@ -116,43 +118,54 @@ impl CompensatedArithmetic<f64> for Df64 {
     type Compensate = f64;
 
     #[inline(always)]
-    fn compensated_sum(a: f64, b: f64) -> Df64 {
+    fn compensate(self: &Df64) -> f64 {
+        return self.lo;
+    }
+}
+
+impl CompensatedAdd<f64> for Df64 {
+    #[inline(always)]
+    fn compensated_add(a: f64, b: f64) -> Df64 {
         return arith::add_dd(a, b);
     }
 
     #[inline(always)]
-    fn compensated_diff(a: f64, b: f64) -> Df64 {
+    fn compensated_fast_add(a: f64, b: f64) -> Df64 {
+        return arith::addfast_dd(a, b);
+    }
+}
+
+impl CompensatedSub<f64> for Df64 {
+    #[inline(always)]
+    fn compensated_sub(a: f64, b: f64) -> Df64 {
         return arith::sub_dd(a, b);
     }
 
+
     #[inline(always)]
-    fn compensated_prod(a: f64, b: f64) -> Df64 {
+    fn compensated_fast_sub(a: f64, b: f64) -> Df64 {
+        return arith::subfast_dd(a, b);
+    }
+}
+
+impl CompensatedMul<f64> for Df64 {
+    #[inline(always)]
+    fn compensated_mul(a: f64, b: f64) -> Df64 {
         return arith::mul_dd(a, b);
     }
+}
 
+impl CompensatedDiv<f64> for Df64 {
     #[inline(always)]
-    fn compensated_ratio(a: f64, b: f64) -> Df64 {
+    fn compensated_div(a: f64, b: f64) -> Df64 {
         return arith::div_dd(a, b);
     }
+}
 
+impl CompensatedSqrt<f64> for Df64 {
     #[inline(always)]
     fn compensated_sqrt(a: f64) -> Df64 {
         return arith::sqrt_d(a);
-    }
-
-    #[inline(always)]
-    fn compensated_fast_sum(a: f64, b: f64) -> Df64 {
-        return arith::addfast_dd(a, b);
-    }
-
-    #[inline(always)]
-    fn compensated_fast_diff(a: f64, b: f64) -> Df64 {
-        return arith::subfast_dd(a, b);
-    }
-
-    #[inline(always)]
-    fn compensate(self: &Df64) -> f64 {
-        return self.lo;
     }
 }
 

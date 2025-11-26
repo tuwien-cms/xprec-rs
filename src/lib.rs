@@ -98,22 +98,6 @@ impl Df64 {
 /// difference of the operation inside `T` and the exact result (or at least
 /// more accurate result.)
 ///
-/// The following operations are defined. For sum and difference, there are
-/// "fast" versions, which may be faster because they may assume that the
-/// arguments are ordered by magnitude, i.e, `a.abs() >= b.abs()`. This
-/// constraint can be slightly relaxed.[^1]
-///
-///  | (op)       | method                          | Also known as  | Exact? |
-///  |------------|---------------------------------|----------------|--------|
-///  | `a + b`    | `::compensated_sum(a, b)`       | 2sum(a, b)     | yes    |
-///  | `a - b`    | `::compensated_diff(a, b)`      | 2diff(a, b)    | yes    |
-///  | `a * b`    | `::compensated_prod(a, b)`      | 2prod(a, b)    | yes    |
-///  | `a / b`    | `::compensated_ratio(a, b)`     |                | no     |
-///  | `a.sqrt()` | `::compensated_sqrt(a, b)`      |                | no     |
-///  |            |                                 |                |        |
-///  | `a + b`    | `::compensated_fast_sum(a, b)`  | fast2sum(a, b) | yes*   |
-///  | `a - b`    | `::compensated_fast_diff(a, b)` | fast2diff(a, b)| yes*   |
-///
 /// **Warning**: Compensated arithmetic is not guaranteed to conform to IEEE
 /// rules when it comes to infinities. One usually gets NaN in this case.
 ///
@@ -128,37 +112,16 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     /// Return the compensate, i.e., the difference of the current value and
     /// its `T` approximation, `self.into<T>()`.
     fn compensate(self: &Self) -> Self::Compensate;
+}
 
+pub trait CompensatedAdd<T> : CompensatedArithmetic<T>
+{
     /// Add `a` and `b` while compensating exactly for the error.
     ///
     /// Adds two values in extended precision, where the result can be
     /// represented exactly. On floating point numbers, this is known as
     /// "2sum" or compensated summation.
-    fn compensated_sum(a: T, b: T) -> Self;
-
-    /// Subtract `b` from `a` while compensating exactly for the error.
-    ///
-    /// Subtracts two values in extended precision, where the result can be
-    /// represented exactly.
-    fn compensated_diff(a: T, b: T) -> Self;
-
-    /// Multiply `a` with `b` while compensating exactly for the error.
-    ///
-    /// Multiplies two values in extended precision, where the result can be
-    /// represented exactly. This is known as "2prod" or compensated
-    /// multiplication.
-    fn compensated_prod(a: T, b: T) -> Self;
-
-    /// Divides `a` by `b` while compensating approximately for the error.
-    ///
-    /// Divides two values in extended precision. Note that generically, one
-    /// cannot represent the ratio exactly in extended precision.
-    fn compensated_ratio(a: T, b: T) -> Self;
-
-    /// Compensated square root operation
-    ///
-    /// Takes the square root and maintains correction term.
-    fn compensated_sqrt(a: T) -> Self;
+    fn compensated_add(a: T, b: T) -> Self;
 
     /// Add `large` and `small` exactly, assuming `large.abs() >= small.abs()`.
     ///
@@ -170,9 +133,18 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     ///
     /// **Unchecked precondition**: you must make sure that `large` is indeed
     /// larger by magnitude than `small`.
-    fn compensated_fast_sum(large: T, small: T) -> Self {
-        return Self::compensated_sum(large, small);
+    fn compensated_fast_add(large: T, small: T) -> Self {
+        return Self::compensated_add(large, small);
     }
+}
+
+pub trait CompensatedSub<T> : CompensatedArithmetic<T>
+{
+    /// Subtract `b` from `a` while compensating exactly for the error.
+    ///
+    /// Subtracts two values in extended precision, where the result can be
+    /// represented exactly.
+    fn compensated_sub(a: T, b: T) -> Self;
 
     /// Subtract `small` from `large` exactly, assuming `large.abs() >= small.abs()`.
     ///
@@ -183,9 +155,36 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     ///
     /// **Unchecked precondition**: you must make sure that `large` is indeed
     /// larger by magnitude than `small`.
-    fn compensated_fast_diff(large: T, small: T) -> Self {
-        return Self::compensated_diff(large, small);
+    fn compensated_fast_sub(large: T, small: T) -> Self {
+        return Self::compensated_sub(large, small);
     }
+}
+
+pub trait CompensatedMul<T> : CompensatedArithmetic<T>
+{
+    /// Multiply `a` with `b` while compensating exactly for the error.
+    ///
+    /// Multiplies two values in extended precision, where the result can be
+    /// represented exactly. This is known as "2prod" or compensated
+    /// multiplication.
+    fn compensated_mul(a: T, b: T) -> Self;
+}
+
+pub trait CompensatedDiv<T> : CompensatedArithmetic<T>
+{
+    /// Divides `a` by `b` while compensating approximately for the error.
+    ///
+    /// Divides two values in extended precision. Note that generically, one
+    /// cannot represent the ratio exactly in extended precision.
+    fn compensated_div(a: T, b: T) -> Self;
+}
+
+pub trait CompensatedSqrt<T> : CompensatedArithmetic<T>
+{
+    /// Compensated square root operation
+    ///
+    /// Takes the square root and maintains correction term.
+    fn compensated_sqrt(a: T) -> Self;
 }
 
 /// Addition under the assumption of ordered arguments.
