@@ -158,8 +158,10 @@ pub fn powf(base: Df64, expo: Df64) -> Df64
             // A negative base with a non-integer exponent has no real result.
             return Df64::NAN;
         }
-        let sign = if is_odd_integer(expo) { -1.0 } else { 1.0 };
-        return sign * exp(expo * log(-base));
+        // Negate rather than multiply by +-1: `1.0 * Df64::INFINITY` is NaN
+        // in compensated arithmetic, which would turn an overflow into NaN.
+        let result = exp(expo * log(-base));
+        return if is_odd_integer(expo) { -result } else { result };
     }
 
     return exp(expo * log(base));
@@ -210,9 +212,11 @@ pub fn powi(base: Df64, expo: i32) -> Df64
     }
 
     // Don't use squaring - terrible roundoff properties.  The sign of a
-    // negative base is carried by the exponent.
-    let sign = if base.hi < 0.0 && odd { -1.0 } else { 1.0 };
-    return sign * exp(expo as f64 * log(funcs::abs(base)));
+    // negative base is carried by the exponent.  Negate rather than multiply
+    // by +-1: `1.0 * Df64::INFINITY` is NaN in compensated arithmetic, which
+    // would turn an overflow into NaN (e.g. `powi(2, 1024)`).
+    let result = exp(expo as f64 * log(funcs::abs(base)));
+    return if base.hi < 0.0 && odd { -result } else { result };
 }
 
 /// Returns significand and exponent of `exp`.
@@ -738,6 +742,14 @@ mod test {
         assert!(powf(Df64::NEG_INFINITY, Df64::ONE) == Df64::NEG_INFINITY);
         assert!(powf(Df64::NEG_INFINITY, -Df64::ONE) == Df64::from(-0.0));
 
+        // The negative base path must not turn an overflow into NaN either
+        assert!(is_infinite(powf(Df64::from(2.0), Df64::from(2000.0))));
+        assert!(is_infinite(powf(Df64::from(-2.0), Df64::from(2000.0))));
+        assert!(powf(Df64::from(-2.0), Df64::from(2001.0)) == Df64::NEG_INFINITY);
+        assert!(powf(Df64::from(-2.0), Df64::from(1024.0)).hi.is_sign_positive());
+        assert!(powf(Df64::from(2.0), Df64::from(-2000.0)) == Df64::ZERO);
+        assert!(powf(Df64::from(-2.0), Df64::from(-2000.0)) == Df64::ZERO);
+
         // infinite exponent
         assert!(powf(Df64::from(0.5), Df64::INFINITY) == Df64::ZERO);
         assert!(powf(Df64::from(0.5), Df64::NEG_INFINITY) == Df64::INFINITY);
@@ -814,6 +826,18 @@ mod test {
         assert!(is_nan(powi(Df64::NAN, -1)));
         assert!(powi(Df64::ONE, 1) == Df64::ONE);
         assert!(powi(Df64::ONE, -1) == Df64::ONE);
+
+        // Overflow has to reach infinity rather than NaN: the sign is applied
+        // by negation because `1.0 * Df64::INFINITY` is NaN.
+        assert!(is_infinite(powi(Df64::from(2.0), 1024)));
+        assert!(is_infinite(powi(Df64::from(2.0), 2000)));
+        assert!(is_infinite(powi(Df64::from(-2.0), 2000)));
+        assert!(powi(Df64::from(-2.0), 2001) == Df64::NEG_INFINITY);
+        assert!(is_infinite(powi(Df64::from(0.5), -2000)));
+        assert!(powi(Df64::from(0.5), 2000) == Df64::ZERO);
+        assert!(powi(Df64::from(2.0), -2000) == Df64::ZERO);
+        assert!(powi(Df64::from(-0.5), i32::MAX) == Df64::from(-0.0));
+        assert!(is_infinite(powi(Df64::from(-0.5), i32::MIN)));
 
         // negative base with an odd and an even exponent
         assert_ulps_eq!(powi(Df64::from(-2.0), 3), Df64::from(-8.0), max_ulps = 8);
