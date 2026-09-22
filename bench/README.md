@@ -177,5 +177,8 @@ Known limitations
   and is invisible for the expensive ones that the 100x threshold targets.
 * Rust is built with `-C target-feature=+fma,+avx2`; the `f64` baseline inside
   the Rust harness uses the same flags.
-* The `powi`/`powf` rows change behaviour once the special-case handling of
-  `exp::powi`/`exp::powf` is implemented, since those add early-exit branches.
+* `powi` and `powf` take early-exit branches for the IEEE-754 special values,
+  so those two rows measure that branchy path rather than a straight
+  `exp(n * log(x))`.  They also describe different algorithms than
+  MultiFloats.jl (see Coverage above), so the ratios on those rows are not
+  purely an implementation-quality comparison.
