@@ -9,7 +9,8 @@
 //!
 //! ```text
 //! RUSTFLAGS="-C target-feature=+fma,+avx2" \
-//!     cargo bench --bench core -- --out bench/out/rust.csv
+//!     cargo run --release --manifest-path bench/rust/Cargo.toml \
+//!         -- --out bench/out/rust.csv
 //! ```
 //!
 //! Copyright (C) 2023-2025 Markus Wallerberger and others

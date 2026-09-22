@@ -15,7 +15,6 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.toml'
-      - 'benches/**'
       - 'bench/**'
       - '.github/workflows/bench.yml'
   # Only used to keep the dependency caches warm; see the `warm-cache` job.
@@ -131,7 +130,9 @@ jobs:
         run: |
           CORE=$(( $(nproc) - 1 ))
           RUSTFLAGS="-C target-feature=+fma,+avx2" \
-              taskset -c "$CORE" cargo bench --bench core -- --out bench/out/rust.csv
+              taskset -c "$CORE" cargo run --release \
+                  --manifest-path bench/rust/Cargo.toml \
+                  -- --out bench/out/rust.csv
 
       - name: Run Julia benchmark
         if: steps.julia_deps.outcome == 'success'
