@@ -88,7 +88,8 @@ jobs:
           MODEL=$(LANG=C lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
           JULIA_V=$(julia --version 2>/dev/null || echo unavailable)
           MF_V=$(julia --project=bench/julia -e \
-              'using Pkg; println(pkgversion(MultiFloats))' 2>/dev/null || echo unavailable)
+              'using Pkg, MultiFloats; println(pkgversion(MultiFloats))' \
+              2>/dev/null || echo unavailable)
           PY_V=$(python -c \
               'import numpy, xprec; print("numpy", numpy.__version__, "xprec", xprec.__version__)' \
               2>/dev/null || echo unavailable)
