@@ -1,0 +1,13 @@
+[package]
+name = "xprec-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Deliberately a crate of its own rather than a `benches/` target: bench and
+# test targets link the `rug` dev-dependency of `xprec`, and building
+# `gmp-mpfr-sys` for it takes about 5.5 minutes, while this benchmark never
+# uses `rug` at all.
+[dependencies]
+xprec = { path = "../.." }
+num-traits = "0.2"

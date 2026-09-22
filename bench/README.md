@@ -34,9 +34,10 @@ Running
 -------
 
 ```sh
-# Rust
+# Rust (its own crate; see bench/rust/Cargo.toml for why)
 RUSTFLAGS="-C target-feature=+fma,+avx2" \
-    taskset -c 2 cargo bench --bench core -- --out bench/out/rust.csv
+    taskset -c 2 cargo run --release --manifest-path bench/rust/Cargo.toml \
+        -- --out bench/out/rust.csv
 
 # Julia (needs MultiFloats, see bench/julia/Project.toml)
 julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
