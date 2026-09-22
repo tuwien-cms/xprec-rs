@@ -1,0 +1,125 @@
+name: Benchmark comparison
+
+# Compares xprec::Df64 against MultiFloats.jl (Float64x2) and the numpy xprec
+# extension (ddouble) for the batch of operations in bench/README.md.
+#
+# An operation that is more than 100x slower than a baseline fails the check
+# and is printed as an ::error:: annotation.  A harness/environment failure
+# (missing Julia packages, failed pip build) only produces a ::warning:: and
+# leaves the check green, so that broken infrastructure does not block a pull
+# request.  The full comparison table is written to the job log and to the
+# step summary.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'benches/**'
+      - 'bench/**'
+      - '.github/workflows/bench.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        run: rustup update stable && rustup default stable
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Julia depot
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia
+          key: julia-${{ runner.os }}-${{ hashFiles('bench/julia/Project.toml') }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('bench/python/requirements.txt') }}
+
+      - name: Install Python benchmark dependencies
+        id: python_deps
+        continue-on-error: true
+        run: python -m pip install -r bench/python/requirements.txt
+
+      - name: Install Julia benchmark dependencies
+        id: julia_deps
+        continue-on-error: true
+        run: julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run Rust benchmark
+        run: |
+          CORE=$(( $(nproc) - 1 ))
+          RUSTFLAGS="-C target-feature=+fma,+avx2" \
+              taskset -c "$CORE" cargo bench --bench core -- --out bench/out/rust.csv
+
+      - name: Run Julia benchmark
+        if: steps.julia_deps.outcome == 'success'
+        continue-on-error: true
+        run: |
+          CORE=$(( $(nproc) - 1 ))
+          taskset -c "$CORE" julia --project=bench/julia bench/julia/bench.jl \
+              --out bench/out/julia.csv
+
+      - name: Run Python benchmark
+        if: steps.python_deps.outcome == 'success'
+        continue-on-error: true
+        run: |
+          CORE=$(( $(nproc) - 1 ))
+          taskset -c "$CORE" python bench/python/bench.py --out bench/out/python.csv
+
+      - name: Compare
+        run: |
+          MODEL=$(LANG=C lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
+          JULIA_V=$(julia --version 2>/dev/null || echo unavailable)
+          MF_V=$(julia --project=bench/julia -e \
+              'using Pkg; println(pkgversion(MultiFloats))' 2>/dev/null || echo unavailable)
+          PY_V=$(python -c \
+              'import numpy, xprec; print("numpy", numpy.__version__, "xprec", xprec.__version__)' \
+              2>/dev/null || echo unavailable)
+          python bench/compare.py \
+              --rust bench/out/rust.csv \
+              --julia bench/out/julia.csv \
+              --python bench/out/python.csv \
+              --threshold 100 \
+              --json bench/out/report.json \
+              --markdown bench/out/report.md \
+              --github \
+              --env "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --env "git=${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+              --env "runner=${MODEL}, $(nproc) vCPU, taskset -c $(( $(nproc) - 1 ))" \
+              --env "rustc=$(rustc --version) RUSTFLAGS=-C target-feature=+fma,+avx2" \
+              --env "julia=${JULIA_V} MultiFloats=${MF_V}" \
+              --env "python=${PY_V}"
+
+      - name: Publish step summary
+        if: always()
+        run: |
+          if [ -f bench/out/report.md ]; then
+              cat bench/out/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+              echo "no benchmark report was produced" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: bench/out/
+          if-no-files-found: warn

@@ -36,6 +36,14 @@ roughly doubles the number of significant digits at the cost of a roughly
       report the largest observed error.
 
 
+Benchmarks
+----------
+`bench/` compares `Df64` against [MultiFloats.jl](https://github.com/dzhang314/MultiFloats.jl)
+(`Float64x2`) and the numpy `xprec` extension (`ddouble`) on batched elementwise
+operations, and documents the methodology and its limitations.  The same
+comparison runs on pull requests (see `.github/workflows/bench.yml`).
+
+
 License and Copying
 -------------------
 Copyright (C) 2023-2025 Markus Wallerberger and others.

@@ -1,0 +1,4 @@
+# Benchmark-only dependencies for the Python harness.
+# `xprec` is only published as an sdist, so pip builds the C extension.
+numpy>=1.24
+xprec>=1.4.7
