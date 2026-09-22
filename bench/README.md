@@ -58,7 +58,11 @@ checksum.  In the report, `n/a` means "this library does not implement the
 operation" and `error` means "the harness for this column did not run"; the
 two are deliberately different, because only the second one invalidates the
 comparison.  The same comparison runs on pull requests, see
-`.github/workflows/bench.yml`.
+`.github/workflows/bench.yml`.  The Julia and pip dependency caches are warmed
+by a separate job on pushes to `mainline`: `actions/cache` is scoped to the ref
+that created an entry, so a pull-request run caches under
+`refs/pull/N/merge`, which no other pull request can read — only a trusted
+default-branch trigger writes into the scope that pull requests can restore.
 
 > **`-C target-feature=+fma` is not optional.**  `Df64` arithmetic goes through
 > `f64::mul_add`, which compiles to a call to libm's correctly-rounded `fma`

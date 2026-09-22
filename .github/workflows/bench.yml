@@ -18,13 +18,73 @@ on:
       - 'benches/**'
       - 'bench/**'
       - '.github/workflows/bench.yml'
+  # Only used to keep the dependency caches warm; see the `warm-cache` job.
+  push:
+    branches: [mainline]
+    paths:
+      - 'bench/**'
+      - '.github/workflows/bench.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # `actions/cache` is scoped to the ref that created the entry, and a
+  # `pull_request` run caches under `refs/pull/N/merge`, which no other pull
+  # request can read.  Only a trusted default-branch trigger (`push`) writes
+  # into the default-branch scope that pull-request runs can restore, so warm
+  # the caches here.  On a cache hit this job only restores and exits.
+  warm-cache:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Julia depot
+        id: julia-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.julia
+          key: julia-${{ runner.os }}-${{ hashFiles('bench/julia/Project.toml') }}
+
+      - name: Cache pip
+        id: pip-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('bench/python/requirements.txt') }}
+
+      - name: Decide whether the caches need warming
+        id: decide
+        run: |
+          if [ '${{ steps.julia-cache.outputs.cache-hit }}' = 'true' ] && \
+             [ '${{ steps.pip-cache.outputs.cache-hit }}' = 'true' ]; then
+              echo "warm=false" >> "$GITHUB_OUTPUT"
+          else
+              echo "warm=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.decide.outputs.warm == 'true'
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+
+      - if: steps.decide.outputs.warm == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Warm the caches
+        if: steps.decide.outputs.warm == 'true'
+        run: |
+          julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
+          python -m pip install -r bench/python/requirements.txt
+
   compare:
+    # The comparison gates pull requests; the push trigger exists only to warm
+    # the caches in the default-branch scope.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     env:
       # One thread everywhere, so that the comparison is not a measurement of
