@@ -114,7 +114,7 @@ results are identical under IEEE-754 round-to-nearest everywhere):
 | operation | A | B |
 |---|---|---|
 | `add`, `sub` | `unit12` | `unit12 * pow2_neg(i % 21)` |
-| `mul`, `div`, `sqrt`, `log`, `log2`, `log10`, `cbrt`, `powi` | `unit12` | `unit12` |
+| `mul`, `div`, `sqrt`, `log`, `log2`, `log10`, `cbrt` | `unit12` | `unit12` |
 | `exp`, `exp2` | `signed * 32` | `unit12` |
 | `sin`, `cos`, `tan`, `atan` | `signed * 8` | `unit12` |
 | `atan2` | `signed * 8` | `signed * 8` |
