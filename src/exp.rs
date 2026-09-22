@@ -1,6 +1,7 @@
 use super::Df64;
 use super::arith::{
-    addfast_dq, addfast_qd, addfast_qq, mul_pow2, square_q, subfast_qd, subfast_qq,
+    addfast_dq, addfast_qd, addfast_qq, mul_pow2, reciprocal_q, square_q, subfast_qd,
+    subfast_qq,
 };
 use super::checks::is_nan;
 use super::consts;
@@ -79,19 +80,136 @@ pub fn exp2(x: Df64) -> Df64
     return exp(consts::LN_2 * x);
 }
 
+/// Returns true if `x` is exactly an integer value.
 #[inline]
+fn is_integer(x: Df64) -> bool
+{
+    // The compensation has to vanish as well: `1 + 1e-40` is not an integer
+    // even though its high part is one.  `fract()` is NaN for infinities, so
+    // this also rejects them.
+    return x.hi.fract() == 0.0 && x.lo == 0.0;
+}
+
+/// Returns true if `x` is exactly an odd integer value.
+#[inline]
+fn is_odd_integer(x: Df64) -> bool
+{
+    // For |x| >= 2^53 every representable value is an even integer, which is
+    // what the remainder evaluates to.
+    return is_integer(x) && (x.hi % 2.0) != 0.0;
+}
+
+/// Power `base^n` with an arbitrary real exponent.
+///
+/// Special values and signs follow IEEE-754 / `f64::powf`.  The remaining
+/// cases are computed as `exp(expo * log(base))`; that expression is not
+/// defined for a negative base, so the sign is factored out first.
 pub fn powf(base: Df64, expo: Df64) -> Df64
 {
-    // XXX this misses all special case handling
+    // x^0 == 1 and 1^y == 1, also for NaN arguments.
+    if expo.hi == 0.0 {
+        return Df64::ONE;
+    }
+    if base == Df64::ONE {
+        return Df64::ONE;
+    }
+    if base.hi.is_nan() || expo.hi.is_nan() {
+        return Df64::NAN;
+    }
+
+    if base.hi == 0.0 {
+        // (+-0)^y is +-0 or +-infinity, with the sign negative only for -0
+        // raised to an odd integer.
+        let neg = base.hi.is_sign_negative() && is_odd_integer(expo);
+        return if expo.hi > 0.0 {
+            if neg { Df64::from(-0.0) } else { Df64::ZERO }
+        } else if neg {
+            Df64::NEG_INFINITY
+        } else {
+            Df64::INFINITY
+        };
+    }
+
+    if expo.hi.is_infinite() {
+        // |x|^+-infinity is 0 or infinity, with the exact value 1 in between.
+        let abs_base = funcs::abs(base);
+        if abs_base == Df64::ONE {
+            return Df64::ONE;
+        }
+        let underflow = (abs_base < Df64::ONE) == (expo.hi > 0.0);
+        return if underflow { Df64::ZERO } else { Df64::INFINITY };
+    }
+
+    if base.hi.is_infinite() {
+        // (+-infinity)^y, again with the sign negative only for an odd
+        // integer exponent.
+        let neg = base.hi.is_sign_negative() && is_odd_integer(expo);
+        return if expo.hi > 0.0 {
+            if neg { Df64::NEG_INFINITY } else { Df64::INFINITY }
+        } else if neg {
+            Df64::from(-0.0)
+        } else {
+            Df64::ZERO
+        };
+    }
+
+    if base.hi < 0.0 {
+        if !is_integer(expo) {
+            // A negative base with a non-integer exponent has no real result.
+            return Df64::NAN;
+        }
+        let sign = if is_odd_integer(expo) { -1.0 } else { 1.0 };
+        return sign * exp(expo * log(-base));
+    }
+
     return exp(expo * log(base));
 }
 
+/// Power `base^n` with an integer exponent.
 #[inline]
 pub fn powi(base: Df64, expo: i32) -> Df64
 {
-    // Don't use squaring - terrible roundoff properties
-    // XXX this misses all special case handling
-    return exp(expo as f64 * log(base));
+    if expo == 0 {
+        return Df64::ONE;
+    }
+    // Cheap exact cases: the general path goes through the logarithm, which
+    // loses precision even where the result is representable exactly.
+    if expo == 1 {
+        return base;
+    }
+    if expo == -1 {
+        return reciprocal_q(base);
+    }
+    if base.hi.is_nan() {
+        return Df64::NAN;
+    }
+
+    let odd = expo % 2 != 0;
+    if base.hi == 0.0 {
+        let neg = base.hi.is_sign_negative() && odd;
+        return if expo > 0 {
+            if neg { Df64::from(-0.0) } else { Df64::ZERO }
+        } else if neg {
+            Df64::NEG_INFINITY
+        } else {
+            Df64::INFINITY
+        };
+    }
+    if base.hi.is_infinite() {
+        let neg = base.hi.is_sign_negative() && odd;
+        return if expo > 0 {
+            if neg { Df64::NEG_INFINITY } else { Df64::INFINITY }
+        } else if neg {
+            Df64::from(-0.0)
+        } else {
+            Df64::ZERO
+        };
+    }
+
+    // Don't use squaring - terrible roundoff properties.  The sign of a
+    // negative base is carried by the exponent.
+    let sign = if base.hi < 0.0 && odd { -1.0 } else { 1.0 };
+    return sign * exp(expo as f64 * log(funcs::abs(base)));
 }
 
 /// Returns significand and exponent of `exp`.
@@ -418,6 +536,8 @@ mod test {
     use super::*;
     use super::super::checks::{is_finite, is_infinite, is_zero};
     use super::super::test_utils::*;
+    use approx::assert_ulps_eq;
+    use rug::ops::Pow;
 
     #[test]
     fn test_expm1_kernel()
@@ -568,6 +688,114 @@ mod test {
         x = Df64::ONE;
         while x.hi < 1e300 {
             check_unary(log1p, |x| x.ln_1p(), x, 1.0);
+            x *= 1.13;
+        }
+    }
+
+    #[test]
+    fn test_powf()
+    {
+        let two = Df64::from(2.0);
+        let neg_two = Df64::from(-2.0);
+        let neg_zero = Df64::from(-0.0);
+
+        // x^0 == 1 and 1^y == 1, also for NaN arguments
+        assert!(powf(Df64::NAN, Df64::ZERO) == Df64::ONE);
+        assert!(powf(Df64::INFINITY, Df64::ZERO) == Df64::ONE);
+        assert!(powf(Df64::ZERO, Df64::ZERO) == Df64::ONE);
+        assert!(powf(Df64::ONE, Df64::NAN) == Df64::ONE);
+        assert!(powf(Df64::ONE, Df64::INFINITY) == Df64::ONE);
+
+        // NaN propagation
+        assert!(is_nan(powf(Df64::NAN, two)));
+        assert!(is_nan(powf(two, Df64::NAN)));
+        assert!(is_nan(powf(neg_two, Df64::NAN)));
+
+        // zero and infinite base, including signed zero
+        assert!(powf(Df64::ZERO, two) == Df64::ZERO);
+        assert!(is_infinite(powf(Df64::ZERO, Df64::from(-1.0))));
+        assert!(powf(neg_zero, Df64::from(3.0)).hi.is_sign_negative());
+        assert!(powf(neg_zero, Df64::from(2.0)).hi.is_sign_positive());
+        assert!(powf(neg_zero, Df64::from(-3.0)) == Df64::NEG_INFINITY);
+        assert!(powf(neg_zero, Df64::from(-2.0)) == Df64::INFINITY);
+        assert!(powf(Df64::INFINITY, two) == Df64::INFINITY);
+        assert!(powf(Df64::INFINITY, Df64::from(-2.0)) == Df64::ZERO);
+        assert!(powf(Df64::NEG_INFINITY, Df64::from(3.0)) == Df64::NEG_INFINITY);
+        assert!(powf(Df64::NEG_INFINITY, Df64::from(2.0)) == Df64::INFINITY);
+        assert!(powf(Df64::NEG_INFINITY, Df64::from(-3.0)).hi.is_sign_negative());
+        assert!(powf(Df64::NEG_INFINITY, Df64::from(-2.0)) == Df64::ZERO);
+
+        // infinite exponent
+        assert!(powf(Df64::from(0.5), Df64::INFINITY) == Df64::ZERO);
+        assert!(powf(Df64::from(0.5), Df64::NEG_INFINITY) == Df64::INFINITY);
+        assert!(powf(two, Df64::INFINITY) == Df64::INFINITY);
+        assert!(powf(two, Df64::NEG_INFINITY) == Df64::ZERO);
+        assert!(powf(-Df64::ONE, Df64::INFINITY) == Df64::ONE);
+        assert!(powf(-Df64::ONE, Df64::NEG_INFINITY) == Df64::ONE);
+
+        // negative base: NaN for a non-integer, sign for an integer exponent
+        assert!(is_nan(powf(neg_two, Df64::from(0.5))));
+        assert_ulps_eq!(powf(neg_two, Df64::from(3.0)), Df64::from(-8.0), max_ulps = 8);
+        assert_ulps_eq!(powf(neg_two, Df64::from(2.0)), Df64::from(4.0), max_ulps = 8);
+        assert_ulps_eq!(powf(neg_two, Df64::from(-1.0)), Df64::from(-0.5), max_ulps = 8);
+
+        // precision against the multiprecision reference.  The exponentiation
+        // is carried out as exp(y * log(x)), so the error grows with
+        // |y * log(x)| (up to ~7.5 here).
+        let mut x = Df64::from(0.125);
+        while x.hi < 8.0 {
+            check_binary(powf, |x, y| x.pow(y), x, Df64::from(2.5), 16.0);
+            check_binary(powf, |x, y| x.pow(y), x, Df64::from(-1.5), 16.0);
+            check_binary(powf, |x, y| x.pow(y), Df64::from(2.5), x, 16.0);
+            x *= 1.13;
+        }
+    }
+
+    /// `powi` with a fixed exponent, so that it can be checked with
+    /// `check_binary` against the multiprecision reference.
+    fn powi_three(base: Df64, _expo: Df64) -> Df64
+    {
+        return powi(base, 3);
+    }
+
+    #[test]
+    fn test_powi()
+    {
+        let two = Df64::from(2.0);
+
+        // exact cases
+        assert!(powi(Df64::NAN, 0) == Df64::ONE);
+        assert!(powi(Df64::ZERO, 0) == Df64::ONE);
+        assert!(powi(two, 1) == two);
+        assert!(powi(two, -1) == Df64::from(0.5));
+        assert!(powi(Df64::from(-2.0), 1) == Df64::from(-2.0));
+        assert!(powi(Df64::from(-2.0), -1) == Df64::from(-0.5));
+
+        // NaN propagation
+        assert!(is_nan(powi(Df64::NAN, 3)));
+
+        // zero and infinite base, including signed zero
+        assert!(powi(Df64::ZERO, 3) == Df64::ZERO);
+        assert!(is_infinite(powi(Df64::ZERO, -3)));
+        assert!(powi(Df64::from(-0.0), 3).hi.is_sign_negative());
+        assert!(powi(Df64::from(-0.0), 2).hi.is_sign_positive());
+        assert!(powi(Df64::from(-0.0), -3) == Df64::NEG_INFINITY);
+        assert!(powi(Df64::INFINITY, 3) == Df64::INFINITY);
+        assert!(powi(Df64::INFINITY, -3) == Df64::ZERO);
+        assert!(powi(Df64::NEG_INFINITY, 3) == Df64::NEG_INFINITY);
+        assert!(powi(Df64::NEG_INFINITY, 4) == Df64::INFINITY);
+        assert!(powi(Df64::NEG_INFINITY, -3).hi.is_sign_negative());
+        assert!(powi(Df64::NEG_INFINITY, -4) == Df64::ZERO);
+
+        // negative base with an odd and an even exponent
+        assert_ulps_eq!(powi(Df64::from(-2.0), 3), Df64::from(-8.0), max_ulps = 8);
+        assert_ulps_eq!(powi(Df64::from(-2.0), 2), Df64::from(4.0), max_ulps = 8);
+
+        // precision against the multiprecision reference
+        let mut x = Df64::from(0.125);
+        while x.hi < 8.0 {
+            check_binary(powi_three, |x, y| x.pow(y), x, Df64::from(3.0), 16.0);
+            check_binary(powi_three, |x, y| x.pow(y), -x, Df64::from(3.0), 16.0);
             x *= 1.13;
         }
     }

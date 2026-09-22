@@ -1706,12 +1706,11 @@ mod test
         assert_ulps_eq!(Float::powi(two, -1), Df64::from(0.5));
         assert_ulps_eq!(Float::powi(Df64::from(3.0), 4), Df64::from(81.0));
 
-        // Signed zero: 0^n returns NaN in current implementation
-        // (uses exp(n*log(x)) which produces NaN for log(0))
+        // Signed zero: 0^n is 0 for n > 0 and infinity for n < 0
         let pos_zero = Df64::ZERO;
-        assert!(Float::powi(pos_zero, 0).is_nan());
-        assert!(Float::powi(pos_zero, 2).is_nan());
-        assert!(Float::powi(pos_zero, -2).is_nan());
+        assert_eq!(Float::powi(pos_zero, 0), Df64::ONE);
+        assert_eq!(Float::powi(pos_zero, 2), Df64::ZERO);
+        assert!(Float::powi(pos_zero, -2).is_infinite());
     }
 
     #[test]
@@ -1724,10 +1723,10 @@ mod test
         assert_ulps_eq!(Float::powf(two, three), Df64::from(8.0));
         assert_ulps_eq!(Float::powf(Df64::from(4.0), Df64::from(0.5)), Df64::from(2.0));
 
-        // Signed zero: powf with zero base returns NaN due to log(0) = -inf
+        // Signed zero: powf(0, y) is 0 for y > 0 and infinity for y < 0
         let pos_zero = Df64::ZERO;
-        let result = Float::powf(pos_zero, two);
-        assert!(result.is_nan());
+        assert_eq!(Float::powf(pos_zero, two), Df64::ZERO);
+        assert!(Float::powf(pos_zero, -two).is_infinite());
     }
 
     #[test]
