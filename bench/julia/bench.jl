@@ -207,6 +207,7 @@ function time_latency(op::AbstractString, a::Vector{T}, b::Vector{T}, reps::Int)
     binary = op in BINARY
     f = op_function(op)
     samples = Vector{Float64}(undef, reps)
+    degenerate = false
     for r in 1:reps
         acc = one(T)
         t0 = time_ns()
@@ -220,8 +221,14 @@ function time_latency(op::AbstractString, a::Vector{T}, b::Vector{T}, reps::Int)
             end
         end
         dt = (time_ns() - t0) / n
+        degenerate |= !isfinite(reduce_value(acc))
         SINKS[] += reduce_value(acc)
         samples[r] = dt
+    end
+    # A chain that drives the accumulator to infinity or NaN no longer
+    # measures the operation, only the special-value branch that catches it.
+    if degenerate
+        return NaN
     end
     return median_sample!(samples)
 end

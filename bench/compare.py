@@ -18,6 +18,7 @@ SPDX-License-Identifier: MIT
 
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -206,6 +207,22 @@ def main():
             return fmt_ns(row["ns"][impl])
         return "error" if impl in failed_impls else "n/a"
 
+    def fmt_cell_latency(row, impl):
+        value = row["ns"].get(impl)
+        if value is None:
+            return "error" if impl in failed_impls else "n/a"
+        # The harness reports NaN when the dependent chain overflowed, so the
+        # number would describe the special-value branch rather than the op.
+        if not math.isfinite(value):
+            return "degenerate"
+        return f"{value:.3f}"
+
+    def jsonable(value):
+        # `json.dump` would otherwise emit bare `NaN`, which is not valid JSON.
+        if value is None or not math.isfinite(value):
+            return None
+        return value
+
     def columns(rows):
         return [
             impl for impl in IMPL_ORDER
@@ -234,13 +251,15 @@ def main():
         lines.append("")
         lines.append("latency (dependent chain, informational; not used for the threshold)")
         lines += render_table(
-            latency, fmt_cell, latency_cols, latency_cols)
+            latency, fmt_cell_latency, latency_cols, latency_cols)
 
     lines.append("")
     lines.append("NOTES")
     lines.append("  * units are ns per element, median of the harness repetitions")
-    lines.append("  * the latency rows chain the operation into itself, which for")
-    lines.append("    several transcendental functions degenerates to a fixed point")
+    lines.append("  * the latency rows chain the operation into itself; where that")
+    lines.append("    drives the accumulator to infinity or NaN the cell reads")
+    lines.append("    `degenerate`, because the number would time the special-value")
+    lines.append("    branch rather than the operation")
     lines.append("  * n/a means the operation is not implemented by that library,")
     lines.append("    error means the harness for that column did not run")
     measured = {row["op"] for row in ops}
@@ -309,7 +328,7 @@ def main():
                    "| op | " + " | ".join(latency_cols) + " |",
                    "|" + "---|" * (1 + len(latency_cols))]
             for row in latency:
-                cells = [row["op"]] + [fmt_cell(row, impl) for impl in latency_cols]
+                cells = [row["op"]] + [fmt_cell_latency(row, impl) for impl in latency_cols]
                 md.append("| " + " | ".join(cells) + " |")
         md.append("")
         if violations:
@@ -332,9 +351,11 @@ def main():
         report = {
             "env": dict(e.split("=", 1) for e in args.env),
             "threshold": args.threshold,
-            "benchmarks": {row["op"]: {"ns": row["ns"], "ratios": row["ratios"]}
+            "benchmarks": {row["op"]: {"ns": {k: jsonable(v) for k, v in row["ns"].items()},
+                                      "ratios": row["ratios"]}
                            for row in ops},
-            "latency": {row["op"]: row["ns"] for row in latency},
+            "latency": {row["op"]: {k: jsonable(v) for k, v in row["ns"].items()}
+                        for row in latency},
             "violations": violations,
             "warnings": warnings,
             "checksum_mismatches": checksum_mismatch,

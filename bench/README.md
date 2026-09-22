@@ -88,9 +88,12 @@ languages.  Every measurement applies the operation to an `N`-element array
 
 Only the **throughput** (independent operations) form is used for the
 threshold.  A **latency** (`acc <- op(a[i], acc)`) form is measured by the
-Rust and Julia harnesses and printed as a second, informational table; it is
-never compared, because chained transcendental operations degenerate to a
-fixed point or to `NaN`.
+Rust and Julia harnesses and printed as a second, informational table.  It is
+never compared, and the harnesses report `NaN` for any operation whose chain
+drives the accumulator to infinity or `NaN` — those cells render as
+`degenerate`, because the timing would describe the special-value branch
+rather than the operation (for example `exp` chained into itself reaches
+`inf`, so its "latency" would time the overflow check, not `exp`).
 
 Each harness reports the **median** over `--reps` (default 15) repetitions.
 An empty-loop **`noop`** row gives the harness floor so that a reader can judge
