@@ -219,6 +219,9 @@ pub mod arith;
 pub mod checks;
 pub mod gauss;
 
+// Inherent methods (public API, implemented in a private module)
+mod inherent;
+
 // Private modules
 mod circular;
 mod consts;
