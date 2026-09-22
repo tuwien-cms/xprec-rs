@@ -14,9 +14,16 @@ double-double implementations:
 [MultiFloats.jl]: https://github.com/dzhang314/MultiFloats.jl
 [xprec]: https://github.com/tuwien-cms/xprec
 
-The harnesses deliberately do **not** use `criterion` or `BenchmarkTools`:
-each one is a small hand-rolled loop that prints a CSV with the median over a
-fixed number of repetitions.
+The harnesses deliberately do **not** use `criterion`, `BenchmarkTools` or
+`timeit`: each one is a small hand-rolled loop that prints a CSV with the
+median over a fixed number of repetitions.  `@btime` would pull in a
+dependency the harness does not otherwise need, and `timeit` disables the
+garbage collector for the timed region (verified: `gc.isenabled()` is false
+inside the region and restored afterwards), which would measure the Python
+column under a different regime than the Julia one, whose collector stays
+enabled; the Rust harness allocates on the stack and has none.  Using the
+same shape of timer everywhere keeps the ratio the only thing that differs
+between the columns.
 
 There is no benchmark suite in either upstream project to compare against;
 the performance table in the top-level `README.md` is the analytic flop count
