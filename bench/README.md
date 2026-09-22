@@ -46,7 +46,11 @@ python bench/compare.py --rust bench/out/rust.csv \
 ```
 
 `compare.py` exits non-zero when an operation is more than `--threshold`
-times slower than a baseline.  The same comparison runs on pull requests, see
+times slower than a baseline, or when two harnesses disagree about the input
+checksum.  In the report, `n/a` means "this library does not implement the
+operation" and `error` means "the harness for this column did not run"; the
+two are deliberately different, because only the second one invalidates the
+comparison.  The same comparison runs on pull requests, see
 `.github/workflows/bench.yml`.
 
 > **`-C target-feature=+fma` is not optional.**  `Df64` arithmetic goes through
@@ -71,9 +75,10 @@ languages.  Every measurement applies the operation to an `N`-element array
 | Python | one whole-array ufunc call (`np.exp(x)`, `x + y`, ...) |
 
 Only the **throughput** (independent operations) form is used for the
-threshold.  A **latency** (`acc <- op(a[i], acc)`) column is printed by the
-Rust and Julia harnesses for information, but it is not compared: chained
-transcendental operations degenerate to a fixed point or to `NaN`.
+threshold.  A **latency** (`acc <- op(a[i], acc)`) form is measured by the
+Rust and Julia harnesses and printed as a second, informational table; it is
+never compared, because chained transcendental operations degenerate to a
+fixed point or to `NaN`.
 
 Each harness reports the **median** over `--reps` (default 15) repetitions.
 An empty-loop **`noop`** row gives the harness floor so that a reader can judge
@@ -154,6 +159,9 @@ and lists the gaps:
 Known limitations
 -----------------
 
+* Everything runs single threaded (`JULIA_NUM_THREADS=1`,
+  `OMP_NUM_THREADS=1`, pinned to one core) so that the numbers do not measure
+  how well each runtime parallelises.
 * Cross-implementation ratios are used, never absolute timings, because the
   host CPU and its clock frequency are not controlled.  Run all three
   harnesses back to back on one machine, pinned to one core, for a meaningful

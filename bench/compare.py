@@ -33,6 +33,15 @@ IMPL_ORDER = ["f64", "xprec", "multifloats", "numpy-xprec"]
 BASELINES = ["multifloats", "numpy-xprec"]
 REFERENCE = "xprec"
 
+# Which implementation labels each harness provides.  Used to distinguish "the
+# harness did not run" (an error) from "the library does not implement this
+# operation" (not available).
+SOURCE_IMPLS = {
+    "rust": ["f64", "xprec"],
+    "julia": ["multifloats"],
+    "python": ["numpy-xprec"],
+}
+
 # Harness sanity check: without hardware FMA, `mul_add` falls back to libm and
 # every Df64 result is inflated by roughly 3x.
 CANARY_NUM = ("f64", "muladd")
@@ -74,6 +83,23 @@ def fmt_ratio(value):
     return f"{value:.2f}x"
 
 
+def render_table(rows, value_of, columns, labels, ratio_names=()):
+    """Render a fixed-width table as a list of lines."""
+    width = max(len(label) for label in labels) + 2
+    lines = [
+        f"{'op':<8}" + "".join(f"{c:>{width}}" for c in labels),
+        f"{'-' * 8}" + "-" * (width * len(labels)),
+    ]
+    for row in rows:
+        line = f"{row['op']:<8}"
+        for column in columns:
+            line += f"{value_of(row, column):>{width}}"
+        for name in ratio_names:
+            line += f"{fmt_ratio(row['ratios'].get(name)):>{width}}"
+        lines.append(line)
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", default="bench/out/rust.csv")
@@ -98,11 +124,17 @@ def main():
         if source:
             table.update(source)
 
-    missing = {name: src is None for name, src in sources.items()}
+    # A harness that produced no CSV at all is an environment failure: its
+    # column is reported as an error, which is different from an operation the
+    # library simply does not implement.
+    failed = {name for name, src in sources.items() if src is None}
+    failed_impls = {impl for name in failed for impl in SOURCE_IMPLS[name]}
     warnings = []
-    for name, is_missing in missing.items():
-        if is_missing:
-            warnings.append(f"{name} harness produced no CSV; its column is unavailable")
+    for name in sorted(failed):
+        warnings.append(
+            f"{name} harness produced no CSV; "
+            f"{', '.join(SOURCE_IMPLS[name])} recorded as error"
+        )
 
     def get(impl, op, mode="throughput"):
         entry = table.get((impl, op, mode))
@@ -132,7 +164,7 @@ def main():
                 f"(threshold {CANARY_MAX:.1f}x); every Df64 number below is inflated"
             )
 
-    # --- table --------------------------------------------------------------
+    # --- throughput (used for the threshold) --------------------------------
     ops = []
     violations = []
     for op in OP_ORDER:
@@ -158,41 +190,71 @@ def main():
         if row["ns"]:
             ops.append(row)
 
+    # --- latency (informational) --------------------------------------------
+    latency = []
+    for op in OP_ORDER:
+        row = {"op": op, "ns": {}}
+        for impl in IMPL_ORDER:
+            value = get(impl, op, "latency")
+            if value is not None:
+                row["ns"][impl] = value
+        if row["ns"]:
+            latency.append(row)
+
+    def fmt_cell(row, impl):
+        if row["ns"].get(impl) is not None:
+            return fmt_ns(row["ns"][impl])
+        return "error" if impl in failed_impls else "n/a"
+
+    def columns(rows):
+        return [
+            impl for impl in IMPL_ORDER
+            if impl in failed_impls or any(impl in row["ns"] for row in rows)
+        ]
+
     header = [f"{k}={v}" for k, v in (e.split("=", 1) for e in args.env)]
 
+    throughput_cols = columns(ops)
     lines = []
     lines.append("================= xprec-rs benchmark comparison =================")
     for line in header:
         lines.append(line)
-    lines.append(f"inputs         identical across implementations "
+    lines.append("inputs         identical across implementations "
                  f"({len(checksum_mismatch)} checksum mismatches)")
     lines.append(f"threshold      {args.threshold:g}x (vs {'/'.join(BASELINES)})")
     lines.append("")
-    cols = [impl for impl in IMPL_ORDER if any(impl in row["ns"] for row in ops)]
-    labels = cols + [f"{REFERENCE}/{b}" for b in BASELINES]
-    width = max(len(c) for c in labels) + 2
-    lines.append(f"{'op':<8}" + "".join(f"{c:>{width}}" for c in cols)
-                 + "".join(f"{REFERENCE + '/' + b:>{width}}" for b in BASELINES))
-    lines.append(f"{'-' * 8}" + "-" * (width * (len(cols) + len(BASELINES))))
-    for row in ops:
-        line = f"{row['op']:<8}"
-        for impl in cols:
-            line += f"{fmt_ns(row['ns'].get(impl)):>{width}}"
-        for baseline in BASELINES:
-            line += f"{fmt_ratio(row['ratios'].get(baseline)):>{width}}"
-        lines.append(line)
+    lines.append("throughput (independent, batched; used for the threshold)")
+    lines += render_table(
+        ops, fmt_cell, throughput_cols,
+        throughput_cols + [f"{REFERENCE}/{b}" for b in BASELINES],
+        ratio_names=BASELINES,
+    )
+    if latency:
+        latency_cols = columns(latency)
+        lines.append("")
+        lines.append("latency (dependent chain, informational; not used for the threshold)")
+        lines += render_table(
+            latency, fmt_cell, latency_cols, latency_cols)
+
     lines.append("")
     lines.append("NOTES")
     lines.append("  * units are ns per element, median of the harness repetitions")
-    lines.append("  * only the batched (throughput) form is used for the threshold;")
-    lines.append("    latency chains degenerate for several transcendental operations")
-    lines.append("  * n/a means the operation is not implemented by that library;")
-    lines.append("    per-implementation gaps:")
+    lines.append("  * the latency rows chain the operation into itself, which for")
+    lines.append("    several transcendental functions degenerates to a fixed point")
+    lines.append("  * n/a means the operation is not implemented by that library,")
+    lines.append("    error means the harness for that column did not run")
     measured = {row["op"] for row in ops}
+    gaps_by_impl = {}
     for impl in BASELINES + [REFERENCE]:
+        if impl in failed_impls:
+            continue
         gaps = [op for op in OP_ORDER
                 if op in measured and (impl, op, "throughput") not in table]
         if gaps:
+            gaps_by_impl[impl] = gaps
+    if gaps_by_impl:
+        lines.append("  * per-implementation gaps:")
+        for impl, gaps in gaps_by_impl.items():
             detail = " (unimplemented: `Float::cbrt` is `todo!()`)" if (
                 impl == REFERENCE and gaps == ["cbrt"]) else ""
             lines.append(f"      {impl}: {', '.join(gaps)}{detail}")
@@ -224,14 +286,23 @@ def main():
     print("\n".join(lines))
 
     if args.markdown:
-        md = ["| op | " + " | ".join(cols) + " | "
+        md = ["### throughput (used for the threshold)", "",
+              "| op | " + " | ".join(throughput_cols) + " | "
               + " | ".join(f"{REFERENCE}/{b}" for b in BASELINES) + " |",
-              "|" + "---|" * (1 + len(cols) + len(BASELINES))]
+              "|" + "---|" * (1 + len(throughput_cols) + len(BASELINES))]
         for row in ops:
             cells = [row["op"]]
-            cells += [fmt_ns(row["ns"].get(impl)) for impl in cols]
+            cells += [fmt_cell(row, impl) for impl in throughput_cols]
             cells += [fmt_ratio(row["ratios"].get(b)) for b in BASELINES]
             md.append("| " + " | ".join(cells) + " |")
+        if latency:
+            latency_cols = columns(latency)
+            md += ["", "### latency (informational)", "",
+                   "| op | " + " | ".join(latency_cols) + " |",
+                   "|" + "---|" * (1 + len(latency_cols))]
+            for row in latency:
+                cells = [row["op"]] + [fmt_cell(row, impl) for impl in latency_cols]
+                md.append("| " + " | ".join(cells) + " |")
         md.append("")
         if violations:
             md.append(f"**{len(violations)} operation(s) exceed {args.threshold:g}x**")
@@ -255,10 +326,13 @@ def main():
             "threshold": args.threshold,
             "benchmarks": {row["op"]: {"ns": row["ns"], "ratios": row["ratios"]}
                            for row in ops},
+            "latency": {row["op"]: row["ns"] for row in latency},
             "violations": violations,
             "warnings": warnings,
             "checksum_mismatches": checksum_mismatch,
-            "missing_harness_output": missing,
+            "missing_harness_output": {name: name in failed
+                                       for name in sorted(SOURCE_IMPLS)},
+            "failed_harness_impls": sorted(failed_impls),
         }
         os.makedirs(os.path.dirname(args.json) or ".", exist_ok=True)
         with open(args.json, "w", encoding="utf-8") as handle:
