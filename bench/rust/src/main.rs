@@ -366,11 +366,7 @@ fn parse_args() -> Args {
         reps: 15,
         imp: "xprec".to_string(),
     };
-    // `cargo bench` passes `--bench` down to non-libtest bench binaries.
-    let argv: Vec<String> = env::args()
-        .skip(1)
-        .filter(|a| a != "--bench")
-        .collect();
+    let argv: Vec<String> = env::args().skip(1).collect();
     let mut i = 0;
     while i < argv.len() {
         let take = |i: usize| -> String {
