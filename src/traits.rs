@@ -5,7 +5,7 @@
  */
 use super::Df64;
 use super::{AddFast, CompensatedArithmetic, SubFast};
-use super::{arith, checks, circular, consts, exp, funcs, hyperbolic, roots, round};
+use super::{arith, consts, round};
 use num_traits::{Inv, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf, SupersetOf};
 use simba::simd::SimdValue;
@@ -209,7 +209,7 @@ impl One for Df64 {
 impl Inv for Df64 {
     type Output = Df64;
     fn inv(self) -> Df64 {
-        return arith::reciprocal_q(self);
+        return Df64::recip(self);
     }
 }
 
@@ -278,27 +278,27 @@ impl SimdValue for Df64 {
 impl Signed for Df64 {
     #[inline(always)]
     fn abs(&self) -> Self {
-        return funcs::abs(*self);
+        return Df64::abs(*self);
     }
 
     #[inline]
     fn abs_sub(&self, other: &Self) -> Self {
-        return funcs::abs(arith::sub_qq(*self, *other));
+        return Df64::abs_sub(*self, *other);
     }
 
     #[inline(always)]
     fn signum(&self) -> Self {
-        return Df64::from(self.hi.signum());
+        return Df64::signum(*self);
     }
 
     #[inline(always)]
     fn is_positive(&self) -> bool {
-        return self.hi.is_sign_positive();
+        return Df64::is_sign_positive(*self);
     }
 
     #[inline(always)]
     fn is_negative(&self) -> bool {
-        return self.hi.is_sign_negative();
+        return Df64::is_sign_negative(*self);
     }
 }
 
@@ -455,273 +455,268 @@ impl num_traits::Float for Df64 {
 
     #[inline(always)]
     fn is_nan(self) -> bool {
-        checks::is_nan(self)
+        Df64::is_nan(self)
     }
 
     #[inline(always)]
     fn is_infinite(self) -> bool {
-        checks::is_infinite(self)
+        Df64::is_infinite(self)
     }
 
     #[inline(always)]
     fn is_finite(self) -> bool {
-        checks::is_finite(self)
+        Df64::is_finite(self)
     }
 
     #[inline(always)]
     fn is_normal(self) -> bool {
-        checks::is_normal(self)
+        Df64::is_normal(self)
     }
 
     #[inline(always)]
     fn is_subnormal(self) -> bool {
-        checks::is_subnormal(self)
+        Df64::is_subnormal(self)
     }
 
     #[inline(always)]
     fn classify(self) -> std::num::FpCategory {
-        checks::classify(self)
+        Df64::classify(self)
     }
 
     #[inline(always)]
     fn is_sign_positive(self) -> bool {
-        !checks::is_sign_negative(self)
+        Df64::is_sign_positive(self)
     }
 
     #[inline(always)]
     fn is_sign_negative(self) -> bool {
-        checks::is_sign_negative(self)
+        Df64::is_sign_negative(self)
     }
 
     // ===== Basic arithmetic (3 methods) =====
 
     #[inline(always)]
     fn abs(self) -> Self {
-        funcs::abs(self)
+        Df64::abs(self)
     }
 
     #[inline(always)]
     fn signum(self) -> Self {
-        Df64::from(self.hi.signum())
+        Df64::signum(self)
     }
 
     #[inline(always)]
     fn recip(self) -> Self {
-        arith::reciprocal_q(self)
+        Df64::recip(self)
     }
 
     // ===== Rounding methods (5 methods) =====
 
     #[inline(always)]
     fn floor(self) -> Self {
-        round::floor(self)
+        Df64::floor(self)
     }
 
     #[inline(always)]
     fn ceil(self) -> Self {
-        round::ceil(self)
+        Df64::ceil(self)
     }
 
     #[inline(always)]
     fn round(self) -> Self {
-        round::round(self)
+        Df64::round(self)
     }
 
     #[inline(always)]
     fn trunc(self) -> Self {
-        round::trunc(self)
+        Df64::trunc(self)
     }
 
     #[inline(always)]
     fn fract(self) -> Self {
-        funcs::fract(self)
+        Df64::fract(self)
     }
 
     // ===== Comparison methods (6 methods) =====
 
     #[inline(always)]
     fn abs_sub(self, other: Self) -> Self {
-        let diff = arith::sub_qq(self, other);
-        if diff.hi < 0.0 {
-            Df64::ZERO
-        } else {
-            diff
-        }
+        return Df64::abs_sub(self, other);
     }
 
     #[inline(always)]
     fn mul_add(self, a: Self, b: Self) -> Self {
-        arith::mul_add_qq(self, a, b)
+        Df64::mul_add(self, a, b)
     }
 
     #[inline(always)]
     fn min(self, other: Self) -> Self {
-        funcs::min(self, other)
+        Df64::min(self, other)
     }
 
     #[inline(always)]
     fn max(self, other: Self) -> Self {
-        funcs::max(self, other)
+        Df64::max(self, other)
     }
 
     #[inline(always)]
     fn clamp(self, min: Self, max: Self) -> Self {
-        funcs::clamp(self, min, max)
+        Df64::clamp(self, min, max)
     }
 
     #[inline(always)]
     fn copysign(self, sign: Self) -> Self {
-        funcs::copysign(self, sign)
+        Df64::copysign(self, sign)
     }
 
     // ===== Additional comparison methods (1 method) =====
 
     #[inline(always)]
     fn hypot(self, other: Self) -> Self {
-        roots::hypot(self, other)
+        Df64::hypot(self, other)
     }
 
     // ===== Exponential and logarithmic functions (11 methods) =====
 
     #[inline(always)]
     fn powi(self, n: i32) -> Self {
-        exp::powi(self, n)
+        Df64::powi(self, n)
     }
 
     #[inline(always)]
     fn powf(self, n: Self) -> Self {
-        exp::powf(self, n)
+        Df64::powf(self, n)
     }
 
     #[inline(always)]
     fn sqrt(self) -> Self {
-        arith::sqrt_q(self)
+        Df64::sqrt(self)
     }
 
     #[inline(always)]
     fn exp(self) -> Self {
-        exp::exp(self)
+        Df64::exp(self)
     }
 
     #[inline(always)]
     fn exp2(self) -> Self {
-        exp::exp2(self)
+        Df64::exp2(self)
     }
 
     #[inline(always)]
     fn ln(self) -> Self {
-        exp::log(self)
+        Df64::ln(self)
     }
 
     #[inline(always)]
     fn log(self, base: Self) -> Self {
-        exp::log_base(self, base)
+        Df64::log(self, base)
     }
 
     #[inline(always)]
     fn log2(self) -> Self {
-        exp::log2(self)
+        Df64::log2(self)
     }
 
     #[inline(always)]
     fn log10(self) -> Self {
-        exp::log10(self)
+        Df64::log10(self)
     }
 
     #[inline(always)]
     fn exp_m1(self) -> Self {
-        exp::expm1(self)
+        Df64::exp_m1(self)
     }
 
     #[inline(always)]
     fn ln_1p(self) -> Self {
-        exp::log1p(self)
+        Df64::ln_1p(self)
     }
 
     // ===== Trigonometric functions (8 methods) =====
 
     #[inline(always)]
     fn sin(self) -> Self {
-        circular::sin(self)
+        Df64::sin(self)
     }
 
     #[inline(always)]
     fn cos(self) -> Self {
-        circular::cos(self)
+        Df64::cos(self)
     }
 
     #[inline(always)]
     fn tan(self) -> Self {
-        circular::tan(self)
+        Df64::tan(self)
     }
 
     #[inline(always)]
     fn asin(self) -> Self {
-        circular::asin(self)
+        Df64::asin(self)
     }
 
     #[inline(always)]
     fn acos(self) -> Self {
-        circular::acos(self)
+        Df64::acos(self)
     }
 
     #[inline(always)]
     fn atan(self) -> Self {
-        circular::atan(self)
+        Df64::atan(self)
     }
 
     #[inline(always)]
     fn atan2(self, other: Self) -> Self {
-        circular::atan2(self, other)
+        Df64::atan2(self, other)
     }
 
     #[inline(always)]
     fn sin_cos(self) -> (Self, Self) {
-        circular::sincos(self)
+        Df64::sin_cos(self)
     }
 
     // ===== Hyperbolic functions (6 methods) =====
 
     #[inline(always)]
     fn sinh(self) -> Self {
-        hyperbolic::sinh(self)
+        Df64::sinh(self)
     }
 
     #[inline(always)]
     fn cosh(self) -> Self {
-        hyperbolic::cosh(self)
+        Df64::cosh(self)
     }
 
     #[inline(always)]
     fn tanh(self) -> Self {
-        hyperbolic::tanh(self)
+        Df64::tanh(self)
     }
 
     #[inline(always)]
     fn asinh(self) -> Self {
-        hyperbolic::asinh(self)
+        Df64::asinh(self)
     }
 
     #[inline(always)]
     fn acosh(self) -> Self {
-        hyperbolic::acosh(self)
+        Df64::acosh(self)
     }
 
     #[inline(always)]
     fn atanh(self) -> Self {
-        hyperbolic::atanh(self)
+        Df64::atanh(self)
     }
 
     // ===== Angle conversion methods (2 methods) =====
 
     #[inline(always)]
     fn to_degrees(self) -> Self {
-        arith::mul_qq(self, consts::DEGREES_PER_RADIAN)
+        Df64::to_degrees(self)
     }
 
     #[inline(always)]
     fn to_radians(self) -> Self {
-        arith::mul_qq(self, consts::RADIANS_PER_DEGREE)
+        Df64::to_radians(self)
     }
 
     // ===== Not yet implemented (2 methods) =====
@@ -805,7 +800,7 @@ impl ComplexField for Df64 {
 
     #[inline(always)]
     fn modulus(self) -> Df64 {
-        return funcs::abs(self);
+        return Df64::abs(self);
     }
 
     #[inline(always)]
@@ -815,7 +810,7 @@ impl ComplexField for Df64 {
 
     #[inline]
     fn argument(self) -> Df64 {
-        if self.hi.is_sign_negative() {
+        if Df64::is_sign_negative(self) {
             return consts::PI;
         } else {
             return Df64::ZERO;
@@ -824,7 +819,7 @@ impl ComplexField for Df64 {
 
     #[inline(always)]
     fn norm1(self) -> Df64 {
-        return funcs::abs(self);
+        return Df64::abs(self);
     }
 
     #[inline(always)]
@@ -839,47 +834,47 @@ impl ComplexField for Df64 {
 
     #[inline(always)]
     fn floor(self) -> Self {
-        return round::floor(self);
+        return Df64::floor(self);
     }
 
     #[inline(always)]
     fn ceil(self) -> Self {
-        return round::ceil(self);
+        return Df64::ceil(self);
     }
 
     #[inline(always)]
     fn round(self) -> Self {
-        return round::round(self);
+        return Df64::round(self);
     }
 
     #[inline(always)]
     fn trunc(self) -> Self {
-        return round::trunc(self);
+        return Df64::trunc(self);
     }
 
     #[inline(always)]
     fn fract(self) -> Self {
-        return funcs::fract(self);
+        return Df64::fract(self);
     }
 
     #[inline]
     fn mul_add(self, a: Self, b: Self) -> Self {
-        arith::mul_add_qq(self, a, b)
+        Df64::mul_add(self, a, b)
     }
 
     #[inline(always)]
     fn abs(self) -> Df64 {
-        return funcs::abs(self);
+        return Df64::abs(self);
     }
 
     #[inline(always)]
     fn hypot(self,other:Self) -> Df64 {
-        return roots::hypot(self, other);
+        return Df64::hypot(self, other);
     }
 
     #[inline(always)]
     fn recip(self) -> Self {
-        return arith::reciprocal_q(self);
+        return Df64::recip(self);
     }
 
     #[inline(always)]
@@ -889,127 +884,127 @@ impl ComplexField for Df64 {
 
     #[inline(always)]
     fn sin(self) -> Self {
-        return circular::sin(self);
+        return Df64::sin(self);
     }
 
     #[inline(always)]
     fn cos(self) -> Self {
-        return circular::cos(self);
+        return Df64::cos(self);
     }
 
     #[inline(always)]
     fn sin_cos(self) -> (Self,Self) {
-        return circular::sincos(self);
+        return Df64::sin_cos(self);
     }
 
     #[inline(always)]
     fn tan(self) -> Self {
-        return circular::tan(self);
+        return Df64::tan(self);
     }
 
     #[inline(always)]
     fn asin(self) -> Self {
-        return circular::asin(self);
+        return Df64::asin(self);
     }
 
     #[inline(always)]
     fn acos(self) -> Self {
-        return circular::acos(self);
+        return Df64::acos(self);
     }
 
     #[inline(always)]
     fn atan(self) -> Self {
-        return circular::atan(self);
+        return Df64::atan(self);
     }
 
     #[inline(always)]
     fn sinh(self) -> Self {
-        return hyperbolic::sinh(self);
+        return Df64::sinh(self);
     }
 
     #[inline(always)]
     fn cosh(self) -> Self {
-        return hyperbolic::cosh(self);
+        return Df64::cosh(self);
     }
 
     #[inline(always)]
     fn tanh(self) -> Self {
-        return hyperbolic::tanh(self);
+        return Df64::tanh(self);
     }
 
     #[inline(always)]
     fn asinh(self) -> Self {
-        return hyperbolic::asinh(self);
+        return Df64::asinh(self);
     }
 
     #[inline(always)]
     fn acosh(self) -> Self {
-        return hyperbolic::acosh(self);
+        return Df64::acosh(self);
     }
 
     #[inline(always)]
     fn atanh(self) -> Self {
-        return hyperbolic::atanh(self);
+        return Df64::atanh(self);
     }
 
     #[inline(always)]
     fn log(self, base:Df64) -> Self {
-        return exp::log_base(self, base);
+        return Df64::log(self, base);
     }
 
     #[inline(always)]
     fn log2(self) -> Self {
-        return exp::log2(self);
+        return Df64::log2(self);
     }
 
     #[inline(always)]
     fn log10(self) -> Self {
-        return exp::log10(self);
+        return Df64::log10(self);
     }
 
     #[inline(always)]
     fn ln(self) -> Self {
-        return exp::log(self);
+        return Df64::ln(self);
     }
 
     #[inline(always)]
     fn ln_1p(self) -> Self {
-        return exp::log1p(self);
+        return Df64::ln_1p(self);
     }
 
     #[inline(always)]
     fn sqrt(self) -> Self {
-        return arith::sqrt_q(self);
+        return Df64::sqrt(self);
     }
 
     #[inline(always)]
     fn exp(self) -> Self {
-        return exp::exp(self);
+        return Df64::exp(self);
     }
 
     #[inline(always)]
     fn exp2(self) -> Self {
-        return exp::exp2(self);
+        return Df64::exp2(self);
     }
 
     #[inline(always)]
     fn exp_m1(self) -> Self {
-        return exp::expm1(self);
+        return Df64::exp_m1(self);
     }
 
     #[inline(always)]
     fn powi(self,n:i32) -> Self {
-        return exp::powi(self, n);
+        return Df64::powi(self, n);
     }
 
     #[inline(always)]
     fn powf(self,n:Df64) -> Self {
-        return exp::powf(self, n);
+        return Df64::powf(self, n);
     }
 
     #[inline(always)]
     fn powc(self,n:Self) -> Self {
-        return exp::powf(self, n);
+        return Df64::powf(self, n);
     }
 
     #[inline(always)]
@@ -1019,43 +1014,43 @@ impl ComplexField for Df64 {
 
     #[inline(always)]
     fn is_finite(&self) -> bool {
-        return checks::is_finite(*self);
+        return Df64::is_finite(*self);
     }
 
     #[inline(always)]
     fn try_sqrt(self) -> Option<Self> {
-        return Some(arith::sqrt_q(self));
+        return Some(Df64::sqrt(self));
     }
 }
 
 impl RealField for Df64 {
     fn is_sign_positive(&self) -> bool {
-        return self.hi.is_sign_positive();
+        return Df64::is_sign_positive(*self);
     }
 
     fn is_sign_negative(&self) -> bool {
-        return self.hi.is_sign_negative();
+        return Df64::is_sign_negative(*self);
     }
 
     fn copysign(self, sign: Self) -> Self {
-        return funcs::copysign(self, sign);
+        return Df64::copysign(self, sign);
     }
 
     fn max(self, other: Self) -> Self {
-        return funcs::max(self, other);
+        return Df64::max(self, other);
     }
 
     fn min(self, other: Self) -> Self {
-        return funcs::min(self, other);
+        return Df64::min(self, other);
     }
 
     fn clamp(self, min: Self, max: Self) -> Self {
-        return funcs::clamp(self, min, max);
+        return Df64::clamp(self, min, max);
     }
 
     #[inline(always)]
     fn atan2(self, other: Self) -> Self {
-        return circular::atan2(self, other);
+        return Df64::atan2(self, other);
     }
 
     #[inline(always)]
