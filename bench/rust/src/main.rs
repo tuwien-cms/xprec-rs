@@ -307,6 +307,7 @@ fn time_latency_f64(op: Op, a: &[f64], b: &[f64], reps: usize) -> f64 {
     let n = a.len();
     let binary = is_binary(op);
     let mut samples = Vec::with_capacity(reps);
+    let mut degenerate = false;
     for _ in 0..reps {
         let mut acc = 1.0f64;
         let start = Instant::now();
@@ -320,8 +321,14 @@ fn time_latency_f64(op: Op, a: &[f64], b: &[f64], reps: usize) -> f64 {
             }
         }
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
+        degenerate |= !acc.is_finite();
         black_box(acc);
         samples.push(dt);
+    }
+    // A chain that drives the accumulator to infinity or NaN no longer
+    // measures the operation, only the special-value branch that catches it.
+    if degenerate {
+        return f64::NAN;
     }
     median(&mut samples)
 }
@@ -330,6 +337,7 @@ fn time_latency_q(op: Op, a: &[Df64], b: &[Df64], reps: usize) -> f64 {
     let n = a.len();
     let binary = is_binary(op);
     let mut samples = Vec::with_capacity(reps);
+    let mut degenerate = false;
     for _ in 0..reps {
         let mut acc = Df64::ONE;
         let start = Instant::now();
@@ -343,8 +351,14 @@ fn time_latency_q(op: Op, a: &[Df64], b: &[Df64], reps: usize) -> f64 {
             }
         }
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
+        degenerate |= !acc.hi().is_finite();
         black_box(acc);
         samples.push(dt);
+    }
+    // See `time_latency_f64`: an overflowed chain measures the branch, not the
+    // operation.
+    if degenerate {
+        return f64::NAN;
     }
     median(&mut samples)
 }
