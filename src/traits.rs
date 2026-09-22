@@ -283,6 +283,11 @@ impl Signed for Df64 {
 
     #[inline]
     fn abs_sub(&self, other: &Self) -> Self {
+        // NOTE: this used to return `|self - other|`, which contradicts the
+        // `Signed` contract ("returns zero if the number is less than or equal
+        // to `other`") and disagreed with the `Float::abs_sub` implementation.
+        // Forwarding to the shared method now returns the positive difference
+        // in both traits.
         return Df64::abs_sub(*self, *other);
     }
 
@@ -1605,6 +1610,26 @@ mod test
         // Value at boundaries
         assert_eq!(Float::clamp(min, min, max), min);
         assert_eq!(Float::clamp(max, min, max), max);
+    }
+
+    #[test]
+    fn test_signed_abs_sub()
+    {
+        // `Signed::abs_sub` is the *positive difference*, not the absolute
+        // difference, and has to agree with `Float::abs_sub`; see the note in
+        // the implementation for the behaviour change this pins down.
+        let a = Df64::from(5.0);
+        let b = Df64::from(3.0);
+        let neg = Df64::from(-5.0);
+
+        assert_eq!(Signed::abs_sub(&a, &b), Df64::from(2.0));
+        assert_eq!(Signed::abs_sub(&b, &a), Df64::ZERO);
+        assert_eq!(Signed::abs_sub(&a, &a), Df64::ZERO);
+        assert_eq!(Signed::abs_sub(&neg, &b), Df64::ZERO);
+        assert_eq!(Signed::abs_sub(&b, &neg), Df64::from(8.0));
+
+        assert_eq!(Signed::abs_sub(&b, &a), Float::abs_sub(b, a));
+        assert_eq!(Signed::abs_sub(&a, &b), Float::abs_sub(a, b));
     }
 
     #[test]
