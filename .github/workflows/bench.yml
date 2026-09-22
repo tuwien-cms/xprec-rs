@@ -102,7 +102,7 @@ jobs:
               --rust bench/out/rust.csv \
               --julia bench/out/julia.csv \
               --python bench/out/python.csv \
-              --threshold 100 \
+              --threshold 10 \
               --json bench/out/report.json \
               --markdown bench/out/report.md \
               --github \
