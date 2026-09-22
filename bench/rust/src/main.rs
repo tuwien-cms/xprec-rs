@@ -370,7 +370,6 @@ struct Args {
     out: String,
     n: usize,
     reps: usize,
-    imp: String,
 }
 
 fn parse_args() -> Args {
@@ -378,7 +377,6 @@ fn parse_args() -> Args {
         out: "bench/out/rust.csv".to_string(),
         n: 16384,
         reps: 15,
-        imp: "xprec".to_string(),
     };
     let argv: Vec<String> = env::args().skip(1).collect();
     let mut i = 0;
@@ -392,7 +390,6 @@ fn parse_args() -> Args {
             "--out" => args.out = take(i),
             "--n" => args.n = take(i).parse().unwrap(),
             "--reps" => args.reps = take(i).parse().unwrap(),
-            "--impl" => args.imp = take(i),
             other => panic!("unknown argument: {}", other),
         }
         i += 2;
@@ -411,20 +408,20 @@ fn main() {
     let mut lines = vec![
         "# xprec-rs benchmark harness".to_string(),
         format!(
-            "# impl={} n={} reps={} powi_exp={}",
-            args.imp, args.n, args.reps, POWI_EXP
+            "# impl=xprec n={} reps={} powi_exp={}",
+            args.n, args.reps, POWI_EXP
         ),
         "impl,op,mode,ns_per_op,checksum".to_string(),
     ];
 
-    println!("impl={} n={} reps={}", args.imp, args.n, args.reps);
+    println!("impl=xprec n={} reps={}", args.n, args.reps);
     println!(
         "{:<8} {:>12} {:>12} {:>12} {:>12} {:>18}",
         "op",
         "f64-thr",
         "f64-lat",
-        &format!("{}-thr", args.imp),
-        &format!("{}-lat", args.imp),
+        "xprec-thr",
+        "xprec-lat",
         "checksum"
     );
 
@@ -447,8 +444,8 @@ fn main() {
         let cs = format!("{checksum:#018x}");
         lines.push(format!("f64,{name},throughput,{f_thr:.6},{cs}"));
         lines.push(format!("f64,{name},latency,{f_lat:.6},{cs}"));
-        lines.push(format!("{},{}", args.imp, name) + &format!(",throughput,{q_thr:.6},{cs}"));
-        lines.push(format!("{},{}", args.imp, name) + &format!(",latency,{q_lat:.6},{cs}"));
+        lines.push(format!("xprec,{name}") + &format!(",throughput,{q_thr:.6},{cs}"));
+        lines.push(format!("xprec,{name}") + &format!(",latency,{q_lat:.6},{cs}"));
     }
 
     fs::write(&args.out, lines.join("\n") + "\n").unwrap();
