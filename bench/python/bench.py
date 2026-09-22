@@ -82,6 +82,10 @@ def pow2_neg(k):
     return 1.0 / (np.uint64(1) << k.astype(np.uint64)).astype(np.float64)
 
 
+# The input transforms cover every operation of the shared specification, not
+# only the ones this harness measures, so that the three generators stay
+# literally identical and the checksum comparison keeps its meaning when an
+# operation is added here later.
 def input_a(op, z):
     if op in ("exp", "exp2"):
         return signed12(z) * 32.0

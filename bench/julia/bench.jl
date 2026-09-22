@@ -58,6 +58,10 @@ const OPS = ["noop", "add", "sub", "mul", "div", "sqrt", "cbrt",
 
 const BINARY = Set(["add", "sub", "mul", "div", "powf"])
 
+# The input transforms cover every operation of the shared specification, not
+# only the ones this harness measures, so that the three generators stay
+# literally identical and the checksum comparison keeps its meaning when an
+# operation is added here later.
 function input_a(op::AbstractString, u::UInt64)
     if op == "exp" || op == "exp2"
         return signed12(u) * 32.0
