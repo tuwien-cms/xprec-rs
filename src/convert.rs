@@ -1,6 +1,30 @@
 use crate::Df64;
 use crate::arith;
+use core::convert::TryFrom;
 use num_traits;
+
+/// Error returned when a `Df64` does not fit into an integer type.
+///
+/// This is the error type of the `TryFrom<Df64>` implementations.  The same
+/// failure is reported as `None` by the `num_traits::ToPrimitive` methods and
+/// by the `try_to_*` functions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TryFromDf64Error
+{
+    /// The value that is not representable in the target type.
+    pub value: Df64,
+}
+
+impl core::fmt::Display for TryFromDf64Error
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+    {
+        return write!(
+            f, "{} is out of range for the requested integer type", self.value);
+    }
+}
+
+impl std::error::Error for TryFromDf64Error { }
 
 macro_rules! convert {
     ($fname:ident Df64 $Dest:ident) => {
@@ -24,6 +48,17 @@ macro_rules! convert {
                 return None;
             }
         }
+
+        impl TryFrom<Df64> for $Dest
+        {
+            type Error = TryFromDf64Error;
+
+            #[inline]
+            fn try_from(x: Df64) -> Result<$Dest, TryFromDf64Error>
+            {
+                return $fname(x).ok_or(TryFromDf64Error { value: x });
+            }
+        }
     };
     ($fname:ident $Src:ident Df64) => {
         /// Convert $Src to Df64
@@ -42,6 +77,15 @@ macro_rules! convert {
                             (x & HI_HALF) as f64, (x & LO_HALF) as f64);
             } else {
                 return Df64 {hi: x as f64, lo: 0.0};
+            }
+        }
+
+        impl From<$Src> for Df64
+        {
+            #[inline]
+            fn from(x: $Src) -> Df64
+            {
+                return $fname(x);
             }
         }
     };

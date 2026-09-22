@@ -219,6 +219,9 @@ pub mod arith;
 pub mod checks;
 pub mod gauss;
 
+/// Error type of the fallible `Df64` to integer conversions.
+pub use convert::TryFromDf64Error;
+
 // Inherent methods (public API, implemented in a private module)
 mod inherent;
 
