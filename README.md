@@ -49,3 +49,5 @@ License and Copying
 Copyright (C) 2023-2025 Markus Wallerberger and others.
 
 Released under the MIT license (see LICENSE for details).
+
+<!-- TEMPORARY: docs-only change to observe the paths filter. -->
