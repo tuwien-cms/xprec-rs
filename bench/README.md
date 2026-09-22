@@ -82,7 +82,10 @@ fixed point or to `NaN`.
 
 Each harness reports the **median** over `--reps` (default 15) repetitions.
 An empty-loop **`noop`** row gives the harness floor so that a reader can judge
-how much of a cheap operation's cost is measurement overhead.
+how much of a cheap operation's cost is measurement overhead, and the
+**`muladd`** row is the FMA canary.  Both are harness diagnostics rather than
+library operations: they are excluded from the threshold and are never listed
+as an unimplemented feature when a harness does not provide them.
 
 **Identical inputs.**  All three harnesses generate the inputs from the same
 integer recipe, so no file needs to be shipped and the values are bit-identical

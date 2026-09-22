@@ -248,8 +248,11 @@ def main():
     for impl in BASELINES + [REFERENCE]:
         if impl in failed_impls:
             continue
+        # `noop` and `muladd` are harness diagnostics, not library operations,
+        # so their absence must not be reported as an unimplemented feature.
         gaps = [op for op in OP_ORDER
-                if op in measured and (impl, op, "throughput") not in table]
+                if op in measured and op not in DIAGNOSTIC_OPS
+                and (impl, op, "throughput") not in table]
         if gaps:
             gaps_by_impl[impl] = gaps
     if gaps_by_impl:
@@ -258,6 +261,11 @@ def main():
             detail = " (unimplemented: `Float::cbrt` is `todo!()`)" if (
                 impl == REFERENCE and gaps == ["cbrt"]) else ""
             lines.append(f"      {impl}: {', '.join(gaps)}{detail}")
+    for op in sorted(DIAGNOSTIC_OPS):
+        providers = [impl for impl in IMPL_ORDER
+                     if (impl, op, "throughput") in table]
+        if providers:
+            lines.append(f"  * diagnostic row {op}: {', '.join(providers)}")
     if canary is not None:
         lines.append(f"  * canary f64 mul_add / f64 mul = {canary:.2f}x "
                      f"(>{CANARY_MAX:.1f}x means FMA is disabled)")
