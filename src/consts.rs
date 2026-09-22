@@ -119,6 +119,18 @@ pub const LN_2: Df64 = Df64 {hi: 0.6931471805599453, lo: 2.3190468138462996e-17}
 /// Natural logarithm of 10
 pub const LN_10: Df64 = Df64 {hi: 2.302585092994046, lo: -2.1707562233822494e-16};
 
+/// Logarithm base-10 of 2
+pub const LOG10_2: Df64 = Df64 {hi: 0.30102999566398120, lo: -2.8037281277851704e-18};
+
+/// Logarithm base-2 of 10
+pub const LOG2_10: Df64 = Df64 {hi: 3.321928094887362, lo: 1.661617516973592e-16};
+
+/// Square root of 2
+pub const SQRT_2: Df64 = Df64 {hi: 1.4142135623730951, lo: -9.667293313452913e-17};
+
+/// Reciprocal of square root of 2 (1/√2 = √2/2)
+pub const FRAC_1_SQRT_2: Df64 = Df64 {hi: 0.7071067811865476, lo: -4.833646656726457e-17};
+
 /// Radians per degree (π/180)
 pub const RADIANS_PER_DEGREE: Df64 = Df64 {hi: 0.017453292519943295, lo: 2.9486522708701687e-19};
 
@@ -152,5 +164,9 @@ mod test
         assert_ulps_eq!(exp::exp(Df64::ONE), EULER_E);
         assert_ulps_eq!(RADIANS_PER_DEGREE, arith::div_qd(PI, 180.0));
         assert_ulps_eq!(DEGREES_PER_RADIAN, arith::mul_qd(ONE_OVER_PI, 180.0));
+        assert_ulps_eq!(SQRT_2, arith::sqrt_q(Df64::from(2.0)));
+        assert_ulps_eq!(FRAC_1_SQRT_2, roots::inv_sqrt(Df64::from(2.0)));
+        assert_ulps_eq!(LOG10_2, LOG10_E * LN_2);
+        assert_ulps_eq!(LOG2_10, LOG2_E * LN_10);
     }
 }
