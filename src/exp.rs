@@ -172,14 +172,6 @@ pub fn powi(base: Df64, expo: i32) -> Df64
     if expo == 0 {
         return Df64::ONE;
     }
-    // Cheap exact cases: the general path goes through the logarithm, which
-    // loses precision even where the result is representable exactly.
-    if expo == 1 {
-        return base;
-    }
-    if expo == -1 {
-        return reciprocal_q(base);
-    }
     if base.hi.is_nan() {
         return Df64::NAN;
     }
@@ -204,6 +196,17 @@ pub fn powi(base: Df64, expo: i32) -> Df64
         } else {
             Df64::ZERO
         };
+    }
+
+    // Cheap exact cases: the general path goes through the logarithm, which
+    // loses precision even where the result is representable exactly.  They
+    // have to come after the zero and infinity branches above, because
+    // `1/0` and `1/inf` are NaN in compensated arithmetic.
+    if expo == 1 {
+        return base;
+    }
+    if expo == -1 {
+        return reciprocal_q(base);
     }
 
     // Don't use squaring - terrible roundoff properties.  The sign of a
@@ -725,6 +728,16 @@ mod test {
         assert!(powf(Df64::NEG_INFINITY, Df64::from(-3.0)).hi.is_sign_negative());
         assert!(powf(Df64::NEG_INFINITY, Df64::from(-2.0)) == Df64::ZERO);
 
+        // ... also for the unit exponents
+        assert!(powf(Df64::ZERO, Df64::ONE) == Df64::ZERO);
+        assert!(is_infinite(powf(Df64::ZERO, -Df64::ONE)));
+        assert!(powf(neg_zero, Df64::ONE).hi.is_sign_negative());
+        assert!(powf(neg_zero, -Df64::ONE) == Df64::NEG_INFINITY);
+        assert!(powf(Df64::INFINITY, Df64::ONE) == Df64::INFINITY);
+        assert!(powf(Df64::INFINITY, -Df64::ONE) == Df64::ZERO);
+        assert!(powf(Df64::NEG_INFINITY, Df64::ONE) == Df64::NEG_INFINITY);
+        assert!(powf(Df64::NEG_INFINITY, -Df64::ONE) == Df64::from(-0.0));
+
         // infinite exponent
         assert!(powf(Df64::from(0.5), Df64::INFINITY) == Df64::ZERO);
         assert!(powf(Df64::from(0.5), Df64::NEG_INFINITY) == Df64::INFINITY);
@@ -786,6 +799,21 @@ mod test {
         assert!(powi(Df64::NEG_INFINITY, 4) == Df64::INFINITY);
         assert!(powi(Df64::NEG_INFINITY, -3).hi.is_sign_negative());
         assert!(powi(Df64::NEG_INFINITY, -4) == Df64::ZERO);
+
+        // The unit exponents take a short cut and therefore must not bypass
+        // the zero and infinity handling above.
+        assert!(powi(Df64::ZERO, 1) == Df64::ZERO);
+        assert!(is_infinite(powi(Df64::ZERO, -1)));
+        assert!(powi(Df64::from(-0.0), 1).hi.is_sign_negative());
+        assert!(powi(Df64::from(-0.0), -1) == Df64::NEG_INFINITY);
+        assert!(powi(Df64::INFINITY, 1) == Df64::INFINITY);
+        assert!(powi(Df64::INFINITY, -1) == Df64::ZERO);
+        assert!(powi(Df64::NEG_INFINITY, 1) == Df64::NEG_INFINITY);
+        assert!(powi(Df64::NEG_INFINITY, -1) == Df64::from(-0.0));
+        assert!(is_nan(powi(Df64::NAN, 1)));
+        assert!(is_nan(powi(Df64::NAN, -1)));
+        assert!(powi(Df64::ONE, 1) == Df64::ONE);
+        assert!(powi(Df64::ONE, -1) == Df64::ONE);
 
         // negative base with an odd and an even exponent
         assert_ulps_eq!(powi(Df64::from(-2.0), 3), Df64::from(-8.0), max_ulps = 8);
