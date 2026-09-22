@@ -26,6 +26,11 @@ permissions:
 jobs:
   compare:
     runs-on: ubuntu-latest
+    env:
+      # One thread everywhere, so that the comparison is not a measurement of
+      # how well each runtime parallelises.
+      JULIA_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v5
 
@@ -105,8 +110,8 @@ jobs:
               --env "git=${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
               --env "runner=${MODEL}, $(nproc) vCPU, taskset -c $(( $(nproc) - 1 ))" \
               --env "rustc=$(rustc --version) RUSTFLAGS=-C target-feature=+fma,+avx2" \
-              --env "julia=${JULIA_V} MultiFloats=${MF_V}" \
-              --env "python=${PY_V}"
+              --env "julia=${JULIA_V} MultiFloats=${MF_V} JULIA_NUM_THREADS=1" \
+              --env "python=${PY_V} OMP_NUM_THREADS=1"
 
       - name: Publish step summary
         if: always()
