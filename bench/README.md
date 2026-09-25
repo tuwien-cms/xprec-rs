@@ -90,9 +90,11 @@ languages.  Every measurement applies the operation to an `N`-element array
 
 | | batched form |
 |---|---|
-| Rust | `chunks_exact(4)` loop over two slices, four-way unrolled accumulator |
-| Julia | closure per operation, scalar loop over `Vector{Float64x2}`, four-way unrolled |
+| Rust | one `chunks_exact(4)` loop per operation over two slices, four-way unrolled accumulator |
+| Julia | closure per operation, `@inbounds` loop over `Vector{Float64x2}`, four-way unrolled |
 | Python | one whole-array ufunc call (`np.exp(x)`, `x + y`, ...) |
+
+The loops follow the rules in "Rules for the timed loops" below.
 
 Only the **throughput** (independent operations) form is used for the
 threshold.  A **latency** (`acc <- op(a[i], acc)`) form is measured by the
@@ -181,6 +183,53 @@ subnormal input and no `NaN`/`Inf` input (MultiFloats treats `Inf` as `NaN`).
 Adding variants means extending all three harnesses and `compare.py` together.
 
 
+Rules for the timed loops
+-------------------------
+
+Each rule below was once broken, and each time a column looked faster or
+slower than the operation it claims to measure
+([issue #44](https://github.com/tuwien-cms/xprec-rs/issues/44)).  Check them
+whenever a harness changes.  The numbers are from the EPYC 7713P development
+machine.
+
+1. **Consume every limb of every result.**  The loops accumulate `hi + lo`
+   (`Value::reduce` in Rust, `reduce_value` in Julia).  If only `hi` is
+   accumulated, the compiler deletes everything that feeds only `lo`, such as
+   the error term of a final `fast_two_sum`: MultiFloats `div` read 1.47
+   instead of 1.76 ns.  A ufunc writes the whole result array, so the Python
+   column cannot drop a limb.
+2. **Compile one loop per operation.**  A closure that captures the
+   operation at run time is compiled once for all operations and dispatches
+   on it per element.  In the Rust harness that meant an out-of-line call and
+   a jump table per element: `specialise!`, which expands one loop per
+   operation, took the `Df64` `noop` floor from 2.6 to 0.97 ns.
+3. **Keep the accumulators away from calls.**  The Rust accumulators used to
+   be live across the clock reads, and the compiler kept them on the stack for
+   the whole loop, loading and storing them in every iteration; passing their
+   tuple to `black_box` also split them across narrow registers.  Together
+   these put the `f64` floor at 1.0 instead of 0.25 ns, and `Df64` `add` at
+   2.06 instead of 1.13 ns.
+4. **Leave the loop unchecked in every language.**  Rust iterates with
+   `chunks_exact`, and the Julia closure indexes under `@inbounds`.  Without
+   it, the Julia loop stays scalar: MultiFloats `add` read 2.96 instead of
+   1.17 ns.
+5. **Read a surprising number in cycles, and in the disassembly.**  A cycle
+   count can be checked against the flop count and the throughput of the
+   units the operation needs; `objdump -d` and `code_native` show what
+   actually ran.
+
+For example, MultiFloats' `Float64x2` division is one division and eight
+flops
+([`mfdiv`](https://github.com/dzhang314/MultiFloats.jl/blob/v3.3.2/src/MultiFloats.jl#L1496-L1503)),
+where `xprec` takes 28 flops (see the table in the top-level `README.md`).
+In the original harness the scalar Julia loop ran it at 4.5 cycles per
+element, which is the reciprocal throughput of the scalar divider on Zen 3
+(`vdivsd` alone also takes 4.5 cycles): the eight flops overlapped with the
+division.  The `f64` `div` baseline was faster than that because the Rust
+loop was partly vectorised (`vdivpd`), and a division that runs faster than
+the scalar divider must be vectorised.
+
+
 Coverage
 --------
 
@@ -211,9 +260,10 @@ Known limitations
   three harnesses back to back on one machine, pinned to one core, for a
   meaningful comparison.  The cycles tables take the clock out of the
   absolute numbers, but not the microarchitecture.
-* The three harnesses have different floors (the `noop` row): a scalar Rust
-  loop is more expensive than a vectorised Julia loop, and a numpy ufunc call
-  allocates a result array.  This matters for cheap operations (`add`, `mul`)
+* The harnesses do not share a floor.  The Rust and Julia loops are both
+  under one cycle per element (the `noop` row), but a numpy ufunc call
+  allocates its result array, and the Python harness has no `noop` row to
+  show what that costs.  This matters for cheap operations (`add`, `mul`)
   and is invisible for the expensive ones that the 100x threshold targets.
 * Rust is built with `-C target-feature=+fma,+avx2`; the `f64` baseline inside
   the Rust harness uses the same flags.

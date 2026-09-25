@@ -1,9 +1,9 @@
 # Cross-language micro-benchmark harness (Julia / MultiFloats.jl).
 #
 # The input generation and the timing methodology are shared with
-# `benches/core.rs` and `bench/python/bench.py`; the canonical specification
-# lives in `bench/README.md`.  Deliberately dependency-free apart from
-# MultiFloats: one CSV row per `(operation, mode)`.
+# `bench/rust/src/main.rs` and `bench/python/bench.py`; the canonical
+# specification lives in `bench/README.md`.  Deliberately dependency-free
+# apart from MultiFloats: one CSV row per `(operation, mode)`.
 #
 # Usage:
 #
