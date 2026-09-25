@@ -331,10 +331,16 @@ fn time_throughput<T: Value>(a: &[T], b: &[T], reps: usize, f: impl Fn(T, T) -> 
     let n = a.len();
     let mut samples = Vec::with_capacity(reps);
     for _ in 0..reps {
-        let (mut s0, mut s1, mut s2, mut s3) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
         let mut ca = a.chunks_exact(4);
         let mut cb = b.chunks_exact(4);
         let start = Instant::now();
+        // The accumulators must not be live across a call: every vector
+        // register is caller-saved, so the compiler would keep them on the
+        // stack and load and store them in every iteration.  They are
+        // therefore created after the first clock read and consumed before
+        // the second.  `black_box` takes their sum, not the tuple: a tuple
+        // made the vectoriser split them across narrower registers.
+        let (mut s0, mut s1, mut s2, mut s3) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
         for (x, y) in ca.by_ref().zip(cb.by_ref()) {
             s0 += f(x[0], y[0]).reduce();
             s1 += f(x[1], y[1]).reduce();
@@ -344,8 +350,8 @@ fn time_throughput<T: Value>(a: &[T], b: &[T], reps: usize, f: impl Fn(T, T) -> 
         for (x, y) in ca.remainder().iter().zip(cb.remainder().iter()) {
             s0 += f(*x, *y).reduce();
         }
+        black_box(s0 + s1 + s2 + s3);
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        black_box((s0, s1, s2, s3));
         samples.push(dt);
     }
     median(&mut samples)
