@@ -311,6 +311,7 @@ pub fn mul_qq(x: Df64, y: Df64) -> Df64
     return addfast_dd(c.hi, cl3);
 }
 
+#[inline]
 pub fn div_qq(x: Df64, y: Df64) -> Df64
 {
     return mul_qq(reciprocal_q(y), x);

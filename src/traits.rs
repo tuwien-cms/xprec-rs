@@ -31,6 +31,7 @@ macro_rules! binary_op
         // implementation for Df64 (op) Df64
         impl $Trait for Df64 {
             type Output = Df64;
+            #[inline]
             fn $func(self, b: Df64) -> Df64 {
                 return $op_qq(self, b);
             }
@@ -38,6 +39,7 @@ macro_rules! binary_op
         // implementation for Df64 (op) f64
         impl $Trait<f64> for Df64 {
             type Output = Df64;
+            #[inline]
             fn $func(self, b: f64) -> Df64 {
                 return $op_qd(self, b);
             }
@@ -45,6 +47,7 @@ macro_rules! binary_op
         // implementation for f64 (op) Df64
         impl $Trait<Df64> for f64 {
             type Output = Df64;
+            #[inline]
             fn $func(self, b: Df64) -> Df64 {
                 return $op_dq(self, b);
             }
@@ -70,11 +73,13 @@ macro_rules! inplace_op
 {
     ($Trait:ident, $func:ident, $op_qq:expr, $op_qd:expr) => {
         impl $Trait for Df64 {
+            #[inline]
             fn $func(&mut self, other: Df64) {
                 *self = $op_qq(*self, other);
             }
         }
         impl $Trait<f64> for Df64 {
+            #[inline]
             fn $func(&mut self, other: f64) {
                 *self = $op_qd(*self, other);
             }
@@ -100,6 +105,7 @@ macro_rules! unary_op
     ($Trait:ident, $func:ident, $op_q:expr) => {
         impl $Trait for Df64 {
             type Output = Df64;
+            #[inline]
             fn $func(self) -> Df64 {
                 return $op_q(self);
             }
