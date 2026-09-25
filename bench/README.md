@@ -36,22 +36,33 @@ Running
 ```sh
 # Rust (its own crate; see bench/rust/Cargo.toml for why)
 RUSTFLAGS="-C target-feature=+fma,+avx2" \
-    taskset -c 2 cargo run --release --manifest-path bench/rust/Cargo.toml \
-        -- --out bench/out/rust.csv
+    cargo build --release --manifest-path bench/rust/Cargo.toml
+BENCH=bench/rust/target/release/xprec-bench
+clock() { taskset -c 2 $BENCH --clock; }    # core clock in GHz, see "Cycles"
+CLOCK_RUST=$(clock)
+taskset -c 2 $BENCH --out bench/out/rust.csv
+CLOCK_RUST=$CLOCK_RUST,$(clock)
 
 # Julia (needs MultiFloats, see bench/julia/Project.toml)
 julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
+CLOCK_JULIA=$(clock)
 taskset -c 2 julia --project=bench/julia bench/julia/bench.jl --out bench/out/julia.csv
+CLOCK_JULIA=$CLOCK_JULIA,$(clock)
 
 # Python (needs numpy and the xprec numpy extension)
 pip install -r bench/python/requirements.txt
+CLOCK_PYTHON=$(clock)
 taskset -c 2 python bench/python/bench.py --out bench/out/python.csv
+CLOCK_PYTHON=$CLOCK_PYTHON,$(clock)
 
 # Merge
 python bench/compare.py --rust bench/out/rust.csv \
     --julia bench/out/julia.csv --python bench/out/python.csv \
+    --clock rust=$CLOCK_RUST --clock julia=$CLOCK_JULIA --clock python=$CLOCK_PYTHON \
     --threshold 100 --json bench/out/report.json --markdown bench/out/report.md
 ```
+
+The `--clock` arguments are optional; without them the report is in ns only.
 
 `compare.py` exits non-zero when an operation is more than `--threshold`
 times slower than a baseline, or when two harnesses disagree about the input
@@ -82,9 +93,11 @@ languages.  Every measurement applies the operation to an `N`-element array
 
 | | batched form |
 |---|---|
-| Rust | `chunks_exact(4)` loop over two slices, four-way unrolled accumulator |
-| Julia | closure per operation, scalar loop over `Vector{Float64x2}`, four-way unrolled |
+| Rust | one `chunks_exact(4)` loop per operation over two slices, four-way unrolled accumulator |
+| Julia | closure per operation, `@inbounds` loop over `Vector{Float64x2}`, four-way unrolled |
 | Python | one whole-array ufunc call (`np.exp(x)`, `x + y`, ...) |
+
+The loops follow the rules in "Rules for the timed loops" below.
 
 Only the **throughput** (independent operations) form is used for the
 threshold.  A **latency** (`acc <- op(a[i], acc)`) form is measured by the
@@ -101,6 +114,27 @@ how much of a cheap operation's cost is measurement overhead, and the
 **`muladd`** row is the FMA canary.  Both are harness diagnostics rather than
 library operations: they are excluded from the threshold and are never listed
 as an unimplemented feature when a harness does not provide them.
+
+**Cycles.**  `xprec-bench --clock` measures the core clock as the rate of a
+chain of dependent register-register integer additions, each of which takes
+one cycle on every x86-64 and AArch64 core.  Additions of an immediate would
+not do: Golden Cove, Raptor Cove and Gracemont execute chains of those in the
+renamer at up to six per cycle ([A. Ertl, "Zero-cycle constant
+adds"](https://www.complang.tuwien.ac.at/anton/additions/)).  The workflow runs
+the probe on the benchmark core before and after each harness and passes the
+readings to `compare.py --clock`, which then prints every table a second time
+in cycles per element (ns times the mean clock around the harness that
+produced the column) and warns when two readings for one harness, or the
+means of two harnesses, differ by more than 5%.  The threshold still uses the
+ratios of the ns values.  The clock is measured rather than read from the
+system because the two disagree: under load the EPYC 7713P development
+machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports 2.48 GHz, and a
+virtual machine reports a nominal frequency.  A cycle count assumes that the
+clock during the harness was the one the probe saw around it.  That is not guaranteed: the frequency follows the load on the other
+cores, turbo and thermal limits, and the AVX offsets of some Intel cores, and
+on the development machine one probe read 3.69 GHz right before a Julia run
+whose timings matched those of a run at 3.09 GHz.  The readings after the
+harness are there to catch such a jump.
 
 **Identical inputs.**  All three harnesses generate the inputs from the same
 integer recipe, so no file needs to be shipped and the values are bit-identical
@@ -155,6 +189,53 @@ subnormal input and no `NaN`/`Inf` input (MultiFloats treats `Inf` as `NaN`).
 Adding variants means extending all three harnesses and `compare.py` together.
 
 
+Rules for the timed loops
+-------------------------
+
+Each rule below was once broken, and each time a column looked faster or
+slower than the operation it claims to measure
+([issue #44](https://github.com/tuwien-cms/xprec-rs/issues/44)).  Check them
+whenever a harness changes.  The numbers are from the EPYC 7713P development
+machine.
+
+1. **Consume every limb of every result.**  The loops accumulate `hi + lo`
+   (`Value::reduce` in Rust, `reduce_value` in Julia).  If only `hi` is
+   accumulated, the compiler deletes everything that feeds only `lo`, such as
+   the error term of a final `fast_two_sum`: MultiFloats `div` read 1.47
+   instead of 1.76 ns.  A ufunc writes the whole result array, so the Python
+   column cannot drop a limb.
+2. **Compile one loop per operation.**  A closure that captures the
+   operation at run time is compiled once for all operations and dispatches
+   on it per element.  In the Rust harness that meant an out-of-line call and
+   a jump table per element: `specialise!`, which expands one loop per
+   operation, took the `Df64` `noop` floor from 2.6 to 0.97 ns.
+3. **Keep the accumulators away from calls.**  The Rust accumulators used to
+   be live across the clock reads, and the compiler kept them on the stack for
+   the whole loop, loading and storing them in every iteration; passing their
+   tuple to `black_box` also split them across narrow registers.  Together
+   these put the `f64` floor at 1.0 instead of 0.25 ns, and `Df64` `add` at
+   2.06 instead of 1.13 ns.
+4. **Leave the loop unchecked in every language.**  Rust iterates with
+   `chunks_exact`, and the Julia closure indexes under `@inbounds`.  Without
+   it, the Julia loop stays scalar: MultiFloats `add` read 2.96 instead of
+   1.17 ns.
+5. **Read a surprising number in cycles, and in the disassembly.**  A cycle
+   count can be checked against the flop count and the throughput of the
+   units the operation needs; `objdump -d` and `code_native` show what
+   actually ran.
+
+For example, MultiFloats' `Float64x2` division is one division and eight
+flops
+([`mfdiv`](https://github.com/dzhang314/MultiFloats.jl/blob/v3.3.2/src/MultiFloats.jl#L1496-L1503)),
+where `xprec` takes 28 flops (see the table in the top-level `README.md`).
+In the original harness the scalar Julia loop ran it at 4.5 cycles per
+element, which is the reciprocal throughput of the scalar divider on Zen 3
+(`vdivsd` alone also takes 4.5 cycles): the eight flops overlapped with the
+division.  The `f64` `div` baseline was faster than that because the Rust
+loop was partly vectorised (`vdivpd`), and a division that runs faster than
+the scalar divider must be vectorised.
+
+
 Coverage
 --------
 
@@ -180,15 +261,15 @@ Known limitations
 * Everything runs single threaded (`JULIA_NUM_THREADS=1`,
   `OMP_NUM_THREADS=1`, pinned to one core) so that the numbers do not measure
   how well each runtime parallelises.
-* Cross-implementation ratios are used, never absolute timings, because the
-  host CPU and its clock frequency are not controlled.  Run all three
-  harnesses back to back on one machine, pinned to one core, for a meaningful
-  comparison.  On the development machine the `schedutil` governor runs the
-  EPYC 7713P at 1.5 GHz, which inflates every absolute number but cancels in
-  the ratios.
-* The three harnesses have different floors (the `noop` row): a scalar Rust
-  loop is more expensive than a vectorised Julia loop, and a numpy ufunc call
-  allocates a result array.  This matters for cheap operations (`add`, `mul`)
+* The threshold uses cross-implementation ratios, never absolute timings,
+  because the host CPU and its clock frequency are not controlled.  Run all
+  three harnesses back to back on one machine, pinned to one core, for a
+  meaningful comparison.  The cycles tables take the clock out of the
+  absolute numbers, but not the microarchitecture.
+* The harnesses do not share a floor.  The Rust and Julia loops both cost
+  about one cycle per element (the `noop` row), but a numpy ufunc call
+  allocates its result array, and the Python harness has no `noop` row to
+  show what that costs.  This matters for cheap operations (`add`, `mul`)
   and is invisible for the expensive ones that the 100x threshold targets.
 * Rust is built with `-C target-feature=+fma,+avx2`; the `f64` baseline inside
   the Rust harness uses the same flags.

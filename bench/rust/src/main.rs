@@ -13,6 +13,9 @@
 //!         -- --out bench/out/rust.csv
 //! ```
 //!
+//! With `--clock` it instead prints the measured core clock in GHz and exits;
+//! `bench/README.md` describes how the clock is used.
+//!
 //! Copyright (C) 2023-2025 Markus Wallerberger and others
 //! SPDX-License-Identifier: MIT
 
@@ -258,6 +261,62 @@ fn apply_q(op: Op, a: Df64, b: Df64) -> Df64 {
     }
 }
 
+/// A benchmarked value type: `f64` or `Df64`.
+trait Value: Copy {
+    const ONE: Self;
+
+    /// Folds every limb into one `f64`, which the timing loops accumulate.
+    ///
+    /// This must depend on the whole result.  Accumulating only `hi` lets the
+    /// compiler delete every instruction that feeds only `lo` (for example
+    /// the error term of the final `fast_two_sum` of a multiplication), and
+    /// the operation is then timed without part of its work.
+    fn reduce(self) -> f64;
+}
+
+impl Value for f64 {
+    const ONE: f64 = 1.0;
+
+    #[inline(always)]
+    fn reduce(self) -> f64 {
+        self
+    }
+}
+
+impl Value for Df64 {
+    const ONE: Df64 = Df64::ONE;
+
+    #[inline(always)]
+    fn reduce(self) -> f64 {
+        self.hi() + self.lo()
+    }
+}
+
+/// Evaluates `$body` with `$k` bound to the operation `$op` as a constant,
+/// through one `match` arm per operation.
+///
+/// Each arm creates its own closures, so every timing loop is compiled for a
+/// single operation and `apply_f64`/`apply_q` fold to one arm.  A closure that
+/// captures the operation at run time is instead compiled once for all of
+/// them and dispatches on it per element, through an out-of-line call and a
+/// jump table, which multiplies the harness floor and prevents vectorisation.
+/// The `match` is exhaustive, so a new `Op` must be listed here as well.
+macro_rules! specialise {
+    ($op:expr, |$k:ident| $body:expr) => {
+        specialise!(@arms $op, $k, $body;
+            Noop MulAdd Add Sub Mul Div Sqrt Exp Exp2 Log Log2 Log10 Powi Powf
+            Sin Cos Tan Atan Atan2 Sinh Cosh Tanh Expm1 Log1p)
+    };
+    (@arms $op:expr, $k:ident, $body:expr; $($variant:ident)*) => {
+        match $op {
+            $(Op::$variant => {
+                const $k: Op = Op::$variant;
+                $body
+            })*
+        }
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Timing
 
@@ -271,30 +330,31 @@ fn median(samples: &mut [f64]) -> f64 {
 /// operations.  Iterating with `chunks_exact` keeps the indexing unchecked so
 /// that the backend can vectorise the loop, matching what a Julia or NumPy
 /// broadcast does.
-fn time_throughput<T: Copy>(
-    a: &[T],
-    b: &[T],
-    reps: usize,
-    mut f: impl FnMut(T, T) -> f64,
-) -> f64 {
+fn time_throughput<T: Value>(a: &[T], b: &[T], reps: usize, f: impl Fn(T, T) -> T) -> f64 {
     let n = a.len();
     let mut samples = Vec::with_capacity(reps);
     for _ in 0..reps {
-        let (mut s0, mut s1, mut s2, mut s3) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
         let mut ca = a.chunks_exact(4);
         let mut cb = b.chunks_exact(4);
         let start = Instant::now();
+        // The accumulators must not be live across a call.  Every vector
+        // register is caller-saved, and when they were, the compiler kept them
+        // on the stack and loaded and stored them in every iteration.  They
+        // are therefore created after the first clock read and consumed
+        // before the second.  `black_box` takes their sum, not the tuple: a
+        // tuple made the vectoriser split them across narrower registers.
+        let (mut s0, mut s1, mut s2, mut s3) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
         for (x, y) in ca.by_ref().zip(cb.by_ref()) {
-            s0 += f(x[0], y[0]);
-            s1 += f(x[1], y[1]);
-            s2 += f(x[2], y[2]);
-            s3 += f(x[3], y[3]);
+            s0 += f(x[0], y[0]).reduce();
+            s1 += f(x[1], y[1]).reduce();
+            s2 += f(x[2], y[2]).reduce();
+            s3 += f(x[3], y[3]).reduce();
         }
         for (x, y) in ca.remainder().iter().zip(cb.remainder().iter()) {
-            s0 += f(*x, *y);
+            s0 += f(*x, *y).reduce();
         }
+        black_box(s0 + s1 + s2 + s3);
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        black_box((s0, s1, s2, s3));
         samples.push(dt);
     }
     median(&mut samples)
@@ -303,25 +363,30 @@ fn time_throughput<T: Copy>(
 /// Dependent (latency) form.  Informational only: several transcendental
 /// operations degenerate (fixed point or NaN) when chained, so this is not
 /// used for the regression threshold.
-fn time_latency_f64(op: Op, a: &[f64], b: &[f64], reps: usize) -> f64 {
+fn time_latency<T: Value>(
+    a: &[T],
+    b: &[T],
+    reps: usize,
+    binary: bool,
+    f: impl Fn(T, T) -> T,
+) -> f64 {
     let n = a.len();
-    let binary = is_binary(op);
     let mut samples = Vec::with_capacity(reps);
     let mut degenerate = false;
     for _ in 0..reps {
-        let mut acc = 1.0f64;
+        let mut acc = T::ONE;
         let start = Instant::now();
         if binary {
             for i in 0..n {
-                acc = apply_f64(op, black_box(a[i]), acc);
+                acc = f(black_box(a[i]), acc);
             }
         } else {
             for i in 0..n {
-                acc = apply_f64(op, black_box(acc), black_box(b[i]));
+                acc = f(black_box(acc), black_box(b[i]));
             }
         }
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        degenerate |= !acc.is_finite();
+        degenerate |= !acc.reduce().is_finite();
         black_box(acc);
         samples.push(dt);
     }
@@ -333,34 +398,96 @@ fn time_latency_f64(op: Op, a: &[f64], b: &[f64], reps: usize) -> f64 {
     median(&mut samples)
 }
 
-fn time_latency_q(op: Op, a: &[Df64], b: &[Df64], reps: usize) -> f64 {
-    let n = a.len();
-    let binary = is_binary(op);
-    let mut samples = Vec::with_capacity(reps);
-    let mut degenerate = false;
-    for _ in 0..reps {
-        let mut acc = Df64::ONE;
-        let start = Instant::now();
-        if binary {
-            for i in 0..n {
-                acc = apply_q(op, black_box(a[i]), acc);
-            }
-        } else {
-            for i in 0..n {
-                acc = apply_q(op, black_box(acc), black_box(b[i]));
-            }
-        }
-        let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        degenerate |= !acc.hi().is_finite();
-        black_box(acc);
-        samples.push(dt);
+// ---------------------------------------------------------------------------
+// Clock
+//
+// `--clock` prints the core clock in GHz, which `bench/compare.py` uses to
+// convert every column to cycles per element.  The clock is measured rather
+// than read from the system: under load the core runs at a frequency that
+// `/proc/cpuinfo` does not show (2.48 GHz reported against 3.09 GHz measured
+// on an EPYC 7713P), and a virtual machine reports its nominal frequency.
+
+/// Dependent additions per iteration of `add_chain`.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+const CHAIN_ADDS: u64 = 16;
+
+/// Runs `iters` iterations of `CHAIN_ADDS` dependent integer additions.  An
+/// addition has a latency of one cycle, so the loop takes `CHAIN_ADDS * iters`
+/// cycles; the loop counter is a separate, shorter chain.
+///
+/// The addend is a register on purpose.  Golden Cove, Raptor Cove and
+/// Gracemont execute dependent additions of small immediates in the renamer,
+/// up to six per cycle (A. Ertl, "Zero-cycle constant adds",
+/// <https://www.complang.tuwien.ac.at/anton/additions/>), which would
+/// overstate the clock sixfold; register-register additions keep their
+/// one-cycle latency there.
+#[cfg(target_arch = "x86_64")]
+fn add_chain(iters: u64) {
+    // SAFETY: the loop reads and writes only the registers declared below.
+    unsafe {
+        std::arch::asm!(
+            "2:",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "dec {n}",
+            "jnz 2b",
+            x = inout(reg) 0u64 => _,
+            n = inout(reg) iters => _,
+            one = in(reg) 1u64,
+            options(nomem, nostack),
+        );
     }
-    // See `time_latency_f64`: an overflowed chain measures the branch, not the
-    // operation.
-    if degenerate {
-        return f64::NAN;
+}
+
+/// See the `x86_64` version.
+#[cfg(target_arch = "aarch64")]
+fn add_chain(iters: u64) {
+    // SAFETY: the loop reads and writes only the registers declared below.
+    unsafe {
+        std::arch::asm!(
+            "2:",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}",
+            "subs {n}, {n}, #1",
+            "b.ne 2b",
+            x = inout(reg) 0u64 => _,
+            n = inout(reg) iters => _,
+            one = in(reg) 1u64,
+            options(nomem, nostack),
+        );
     }
+}
+
+/// Core clock in GHz: the median rate of `add_chain` over `reps` runs of
+/// about 5 ms each, after 0.1 s of the same work so that a frequency governor
+/// has ramped the core up.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn measure_clock_ghz(reps: usize) -> f64 {
+    const ITERS: u64 = 1 << 20;
+    let warm_up = Instant::now();
+    while warm_up.elapsed().as_millis() < 100 {
+        add_chain(ITERS);
+    }
+    let mut samples: Vec<f64> = (0..reps)
+        .map(|_| {
+            let start = Instant::now();
+            add_chain(ITERS);
+            (CHAIN_ADDS * ITERS) as f64 / start.elapsed().as_nanos() as f64
+        })
+        .collect();
     median(&mut samples)
+}
+
+/// No probe for this architecture: `compare.py` then reports ns only.
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+fn measure_clock_ghz(_reps: usize) -> f64 {
+    f64::NAN
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +497,7 @@ struct Args {
     out: String,
     n: usize,
     reps: usize,
+    clock: bool,
 }
 
 fn parse_args() -> Args {
@@ -377,10 +505,16 @@ fn parse_args() -> Args {
         out: "bench/out/rust.csv".to_string(),
         n: 16384,
         reps: 15,
+        clock: false,
     };
     let argv: Vec<String> = env::args().skip(1).collect();
     let mut i = 0;
     while i < argv.len() {
+        if argv[i] == "--clock" {
+            args.clock = true;
+            i += 1;
+            continue;
+        }
         let take = |i: usize| -> String {
             argv.get(i + 1)
                 .unwrap_or_else(|| panic!("missing value for {}", argv[i]))
@@ -399,6 +533,11 @@ fn parse_args() -> Args {
 
 fn main() {
     let args = parse_args();
+    if args.clock {
+        // Nothing but the number, so that a shell can capture it.
+        println!("{:.4}", measure_clock_ghz(args.reps));
+        return;
+    }
     if let Some(parent) = Path::new(&args.out).parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).unwrap();
@@ -428,13 +567,19 @@ fn main() {
     for (op, name) in OPS {
         let (a64, b64, checksum) = generate(*op, args.n);
 
-        let f_thr = time_throughput(&a64, &b64, args.reps, |x, y| apply_f64(*op, x, y));
-        let f_lat = time_latency_f64(*op, &a64, &b64, args.reps);
-
         let aq: Vec<Df64> = a64.iter().map(|x| Df64::from(*x)).collect();
         let bq: Vec<Df64> = b64.iter().map(|x| Df64::from(*x)).collect();
-        let q_thr = time_throughput(&aq, &bq, args.reps, |x, y| apply_q(*op, x, y).hi());
-        let q_lat = time_latency_q(*op, &aq, &bq, args.reps);
+
+        let [f_thr, f_lat, q_thr, q_lat] = specialise!(*op, |OP| {
+            let reps = args.reps;
+            let binary = is_binary(OP);
+            [
+                time_throughput(&a64, &b64, reps, |x, y| apply_f64(OP, x, y)),
+                time_latency(&a64, &b64, reps, binary, |x, y| apply_f64(OP, x, y)),
+                time_throughput(&aq, &bq, reps, |x, y| apply_q(OP, x, y)),
+                time_latency(&aq, &bq, reps, binary, |x, y| apply_q(OP, x, y)),
+            ]
+        });
 
         println!(
             "{:<8} {:>12.4} {:>12.4} {:>12.4} {:>12.4} {:#018x}",

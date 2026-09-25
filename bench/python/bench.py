@@ -2,8 +2,8 @@
 """Cross-language micro-benchmark harness (Python / numpy + xprec.ddouble).
 
 The input generation and the timing methodology are shared with
-``benches/core.rs`` and ``bench/julia/bench.jl``; the canonical specification
-lives in ``bench/README.md``.
+``bench/rust/src/main.rs`` and ``bench/julia/bench.jl``; the canonical
+specification lives in ``bench/README.md``.
 
 Only operations that the `xprec` numpy extension actually provides as ufuncs
 are measured; `exp2`, `log2`, `log10` and `cbrt` have no `ddouble` ufunc and

@@ -1,9 +1,9 @@
 # Cross-language micro-benchmark harness (Julia / MultiFloats.jl).
 #
 # The input generation and the timing methodology are shared with
-# `benches/core.rs` and `bench/python/bench.py`; the canonical specification
-# lives in `bench/README.md`.  Deliberately dependency-free apart from
-# MultiFloats: one CSV row per `(operation, mode)`.
+# `bench/rust/src/main.rs` and `bench/python/bench.py`; the canonical
+# specification lives in `bench/README.md`.  Deliberately dependency-free
+# apart from MultiFloats: one CSV row per `(operation, mode)`.
 #
 # Usage:
 #
@@ -159,9 +159,13 @@ function op_function(op::AbstractString)
 end
 
 # Reduce a benchmark value to a plain Float64 so that the accumulation loop is
-# identical for both element types.  `_limbs[1]` is the leading limb.
+# identical for both element types.  This must depend on every limb:
+# accumulating only the leading one lets the compiler delete everything that
+# feeds only the trailing one (for example the error term of the final
+# `fast_two_sum` of a division), and the operation is then timed without part
+# of its work.
 @inline reduce_value(x::Float64) = x
-@inline reduce_value(x::Float64x2) = x._limbs[1]
+@inline reduce_value(x::Float64x2) = x._limbs[1] + x._limbs[2]
 
 # ---------------------------------------------------------------------------
 # Timing
@@ -265,8 +269,10 @@ function main()
         amf = Float64x2.(a64)
         bmf = Float64x2.(b64)
 
+        # `@inbounds` matches the unchecked `chunks_exact` loop of the Rust
+        # harness: a bounds check per element keeps the loop scalar.
         f = op_function(op)
-        thr = time_throughput(n, reps, i -> f(amf[i], bmf[i]))
+        thr = time_throughput(n, reps, i -> @inbounds f(amf[i], bmf[i]))
         lat = time_latency(op, amf, bmf, reps)
 
         @printf("%-8s %12.4f %12.4f 0x%016x\n", op, thr, lat, checksum)
