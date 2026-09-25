@@ -50,9 +50,13 @@ SOURCE_IMPLS = {
 IMPL_SOURCE = {impl: name for name, impls in SOURCE_IMPLS.items() for impl in impls}
 
 # The clock readings passed with `--clock` are taken before and after each
-# harness.  When they differ by more than this, the frequency moved and the
-# cycles are uncertain by about as much.
-CLOCK_SPREAD_MAX = 1.05
+# harness.  The report warns when two readings for one harness, or the means
+# of two harnesses, differ by more than this.  15% is above the largest spread
+# seen on the GitHub runners (8.5%, on a Zen 5 part; the Zen 3 and Zen 4
+# runners stayed below 1%), and a smaller spread leaves the mean within 7.5%
+# of any clock in between, which does not change how a cycle count reads
+# against a flop count.  The header lists every reading either way.
+CLOCK_SPREAD_MAX = 1.15
 
 # Harness sanity check: without hardware FMA, `mul_add` falls back to libm and
 # every Df64 result is inflated by roughly 3x.
@@ -197,7 +201,15 @@ def main():
             warnings.append(f"INPUT MISMATCH for {op}: {seen}")
 
     # --- clocks -------------------------------------------------------------
-    clock_text = ", ".join(f"{name} {clocks[name]:.2f} GHz"
+    def readings_text(name):
+        values = clock_readings[name]
+        if len(values) < 2:
+            return ""
+        return " (" + ", ".join(f"{v:.2f}" for v in values) + ")"
+
+    means_text = ", ".join(f"{name} {clocks[name]:.2f} GHz"
+                           for name in SOURCE_IMPLS if name in clocks)
+    clock_text = ", ".join(f"{name} {clocks[name]:.2f} GHz{readings_text(name)}"
                            for name in SOURCE_IMPLS if name in clocks)
     for name in SOURCE_IMPLS:
         values = clock_readings.get(name, [])
@@ -212,7 +224,7 @@ def main():
         if spread > CLOCK_SPREAD_MAX:
             warnings.append(
                 f"the clock differs by {100 * (spread - 1):.0f}% between harnesses "
-                f"({clock_text}); the ns ratios compare different frequencies, "
+                f"({means_text}); the ns ratios compare different frequencies, "
                 "the cycles do not"
             )
 
@@ -321,7 +333,8 @@ def main():
                  f"({len(checksum_mismatch)} checksum mismatches)")
     lines.append(f"threshold      {args.threshold:g}x (vs {'/'.join(BASELINES)})")
     if clocks:
-        lines.append(f"clock          {clock_text} (mean of the readings around each harness)")
+        lines.append(f"clock          {clock_text}")
+        lines.append("               (mean, and the readings before and after each harness)")
     else:
         lines.append("clock          not measured, so no cycles tables (see --clock)")
     lines.append("")
@@ -438,7 +451,8 @@ def main():
                                fmt_cell_cycles, clocked(latency_cols))
         md.append("")
         if clocks:
-            md.append(f"Clock (mean of the readings around each harness): {clock_text}.")
+            md.append("Clock (mean, and the readings before and after each harness): "
+                      f"{clock_text}.")
             md.append("")
         if violations:
             md.append(f"**{len(violations)} operation(s) exceed {args.threshold:g}x**")
