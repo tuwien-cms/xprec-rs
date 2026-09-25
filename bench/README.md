@@ -124,17 +124,21 @@ adds"](https://www.complang.tuwien.ac.at/anton/additions/)).  The workflow runs
 the probe on the benchmark core before and after each harness and passes the
 readings to `compare.py --clock`, which then prints every table a second time
 in cycles per element (ns times the mean clock around the harness that
-produced the column) and warns when two readings for one harness, or the
-means of two harnesses, differ by more than 5%.  The threshold still uses the
-ratios of the ns values.  The clock is measured rather than read from the
-system because the two disagree: under load the EPYC 7713P development
-machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports 2.48 GHz, and a
-virtual machine reports a nominal frequency.  A cycle count assumes that the
-clock during the harness was the one the probe saw around it.  That is not guaranteed: the frequency follows the load on the other
-cores, turbo and thermal limits, and the AVX offsets of some Intel cores, and
-on the development machine one probe read 3.69 GHz right before a Julia run
-whose timings matched those of a run at 3.09 GHz.  The readings after the
-harness are there to catch such a jump.
+produced the column).  The report header lists every reading.  It warns when
+two readings for one harness, or the means of two harnesses, differ by more
+than 15%: the largest spread seen on the GitHub runners is 8.5% (on a Zen 5
+part; the Zen 3 and Zen 4 runners stay below 1%), and within 15% the mean is
+at most 7.5% off any clock in between, which does not change how a cycle
+count reads against a flop count.  The threshold still uses the ratios of the
+ns values.  The clock is measured rather than read from the system because
+the two disagree: under load the EPYC 7713P development machine runs at 3.1
+to 3.7 GHz while `/proc/cpuinfo` reports 2.48 GHz, and a virtual machine
+reports a nominal frequency.  A cycle count assumes that the clock during the
+harness was the one the probe saw around it.  That is not guaranteed: the
+frequency follows the load on the other cores, turbo and thermal limits, and
+the AVX offsets of some Intel cores, and on the development machine one probe
+read 3.69 GHz right before a Julia run whose timings matched those of a run
+at 3.09 GHz.  The readings after the harness are there to catch such a jump.
 
 **Identical inputs.**  All three harnesses generate the inputs from the same
 integer recipe, so no file needs to be shipped and the values are bit-identical
