@@ -10,7 +10,11 @@ Exit status is 0 unless a ratio exceeds ``--threshold``.
 Usage:
 
     python bench/compare.py --rust out/rust.csv --julia out/julia.csv \
-        --python out/python.csv --threshold 100 --json out/report.json
+        --python out/python.csv --threshold 100 --json out/report.json \
+        --clock rust=3.09 --clock julia=3.08 --clock python=3.09
+
+``--clock`` takes the readings of ``xprec-bench --clock`` and adds tables in
+cycles per element; without it the report is in ns only.
 
 Copyright (C) 2023-2025 Markus Wallerberger and others
 SPDX-License-Identifier: MIT
@@ -42,6 +46,11 @@ SOURCE_IMPLS = {
     "julia": ["multifloats"],
     "python": ["numpy-xprec"],
 }
+IMPL_SOURCE = {impl: name for name, impls in SOURCE_IMPLS.items() for impl in impls}
+
+# The clocks passed with `--clock` are measured right before each harness, so
+# a large spread between them means the frequency moved during the run.
+CLOCK_SPREAD_MAX = 1.05
 
 # Harness sanity check: without hardware FMA, `mul_add` falls back to libm and
 # every Df64 result is inflated by roughly 3x.
@@ -70,6 +79,28 @@ def read_csv(path):
             impl, op, mode, ns, cs = parts
             data[(impl, op, mode)] = (float(ns), cs)
     return data
+
+
+def parse_clocks(specs):
+    """Return `{source: GHz}` from `--clock` values.
+
+    A value is either `source=GHz`, for one harness, or a bare `GHz`, for all
+    of them.  An empty or non-finite reading (a probe that did not run, or an
+    architecture without one) is dropped, so that harness gets no cycles.
+    """
+    clocks = {}
+    for spec in specs:
+        name, sep, value = spec.rpartition("=")
+        if sep and name not in SOURCE_IMPLS:
+            raise SystemExit(f"--clock: unknown harness {name!r} in {spec!r}")
+        try:
+            ghz = float(value)
+        except ValueError:
+            continue
+        if math.isfinite(ghz) and ghz > 0:
+            for source in [name] if sep else SOURCE_IMPLS:
+                clocks[source] = ghz
+    return clocks
 
 
 def fmt_ns(value):
@@ -113,7 +144,13 @@ def main():
                         help="emit ::error::/::warning:: workflow commands")
     parser.add_argument("--env", action="append", default=[],
                         help="extra `key=value` line for the report header")
+    parser.add_argument("--clock", action="append", default=[],
+                        help="core clock in GHz measured right before a harness "
+                             "ran (`xprec-bench --clock`), as `rust=GHz`, "
+                             "`julia=GHz`, `python=GHz`, or a bare `GHz` for "
+                             "all; adds the tables in cycles per element")
     args = parser.parse_args()
+    clocks = parse_clocks(args.clock)
 
     sources = {
         "rust": read_csv(args.rust),
@@ -152,6 +189,18 @@ def main():
         if len(set(seen.values())) > 1:
             checksum_mismatch.append({"op": op, "checksums": seen})
             warnings.append(f"INPUT MISMATCH for {op}: {seen}")
+
+    # --- clocks -------------------------------------------------------------
+    clock_text = ", ".join(f"{name} {clocks[name]:.2f} GHz"
+                           for name in SOURCE_IMPLS if name in clocks)
+    if len(clocks) > 1:
+        spread = max(clocks.values()) / min(clocks.values())
+        if spread > CLOCK_SPREAD_MAX:
+            warnings.append(
+                f"the clock moved by {100 * (spread - 1):.0f}% between harnesses "
+                f"({clock_text}); the ns ratios compare different frequencies, "
+                "the cycles do not"
+            )
 
     # --- canary -------------------------------------------------------------
     canary = None
@@ -202,6 +251,12 @@ def main():
         if row["ns"]:
             latency.append(row)
 
+    # --- cycles (for reading the numbers; the threshold stays on ns) --------
+    for row in ops + latency:
+        row["cycles"] = {impl: value * clocks[IMPL_SOURCE[impl]]
+                         for impl, value in row["ns"].items()
+                         if IMPL_SOURCE[impl] in clocks}
+
     def fmt_cell(row, impl):
         if row["ns"].get(impl) is not None:
             return fmt_ns(row["ns"][impl])
@@ -217,6 +272,14 @@ def main():
             return "degenerate"
         return f"{value:.3f}"
 
+    def fmt_cell_cycles(row, impl):
+        value = row["cycles"].get(impl)
+        if value is None:
+            return "error" if impl in failed_impls else "n/a"
+        if not math.isfinite(value):
+            return "degenerate"
+        return f"{value:.2f}"
+
     def jsonable(value):
         # `json.dump` would otherwise emit bare `NaN`, which is not valid JSON.
         if value is None or not math.isfinite(value):
@@ -229,9 +292,13 @@ def main():
             if impl in failed_impls or any(impl in row["ns"] for row in rows)
         ]
 
+    def clocked(cols):
+        return [impl for impl in cols if IMPL_SOURCE[impl] in clocks]
+
     header = [f"{k}={v}" for k, v in (e.split("=", 1) for e in args.env)]
 
     throughput_cols = columns(ops)
+    latency_cols = columns(latency)
     lines = []
     lines.append("================= xprec-rs benchmark comparison =================")
     for line in header:
@@ -239,6 +306,10 @@ def main():
     lines.append("inputs         identical across implementations "
                  f"({len(checksum_mismatch)} checksum mismatches)")
     lines.append(f"threshold      {args.threshold:g}x (vs {'/'.join(BASELINES)})")
+    if clocks:
+        lines.append(f"clock          {clock_text} (measured right before each harness)")
+    else:
+        lines.append("clock          not measured, so no cycles tables (see --clock)")
     lines.append("")
     lines.append("throughput (independent, batched; used for the threshold)")
     lines += render_table(
@@ -246,16 +317,27 @@ def main():
         throughput_cols + [f"{REFERENCE}/{b}" for b in BASELINES],
         ratio_names=BASELINES,
     )
+    if clocked(throughput_cols):
+        lines.append("")
+        lines.append("throughput in cycles per element")
+        lines += render_table(
+            ops, fmt_cell_cycles, clocked(throughput_cols), clocked(throughput_cols))
     if latency:
-        latency_cols = columns(latency)
         lines.append("")
         lines.append("latency (dependent chain, informational; not used for the threshold)")
         lines += render_table(
             latency, fmt_cell_latency, latency_cols, latency_cols)
+        if clocked(latency_cols):
+            lines.append("")
+            lines.append("latency in cycles per element")
+            lines += render_table(
+                latency, fmt_cell_cycles, clocked(latency_cols), clocked(latency_cols))
 
     lines.append("")
     lines.append("NOTES")
-    lines.append("  * units are ns per element, median of the harness repetitions")
+    lines.append("  * units are ns per element, median of the harness repetitions;")
+    lines.append("    the cycles tables multiply each column by the clock measured")
+    lines.append("    right before the harness that produced it")
     lines.append("  * the latency rows chain the operation into itself; where that")
     lines.append("    drives the accumulator to infinity or NaN the cell reads")
     lines.append("    `degenerate`, because the number would time the special-value")
@@ -313,6 +395,15 @@ def main():
     print("\n".join(lines))
 
     if args.markdown:
+        def md_table(title, rows, value_of, cols):
+            table = ["", title, "",
+                     "| op | " + " | ".join(cols) + " |",
+                     "|" + "---|" * (1 + len(cols))]
+            for row in rows:
+                table.append("| " + " | ".join(
+                    [row["op"]] + [value_of(row, impl) for impl in cols]) + " |")
+            return table
+
         md = ["### throughput (used for the threshold)", "",
               "| op | " + " | ".join(throughput_cols) + " | "
               + " | ".join(f"{REFERENCE}/{b}" for b in BASELINES) + " |",
@@ -322,15 +413,19 @@ def main():
             cells += [fmt_cell(row, impl) for impl in throughput_cols]
             cells += [fmt_ratio(row["ratios"].get(b)) for b in BASELINES]
             md.append("| " + " | ".join(cells) + " |")
+        if clocked(throughput_cols):
+            md += md_table("### throughput in cycles per element", ops,
+                           fmt_cell_cycles, clocked(throughput_cols))
         if latency:
-            latency_cols = columns(latency)
-            md += ["", "### latency (informational)", "",
-                   "| op | " + " | ".join(latency_cols) + " |",
-                   "|" + "---|" * (1 + len(latency_cols))]
-            for row in latency:
-                cells = [row["op"]] + [fmt_cell_latency(row, impl) for impl in latency_cols]
-                md.append("| " + " | ".join(cells) + " |")
+            md += md_table("### latency (informational)", latency,
+                           fmt_cell_latency, latency_cols)
+            if clocked(latency_cols):
+                md += md_table("### latency in cycles per element", latency,
+                               fmt_cell_cycles, clocked(latency_cols))
         md.append("")
+        if clocks:
+            md.append(f"Clock measured right before each harness: {clock_text}.")
+            md.append("")
         if violations:
             md.append(f"**{len(violations)} operation(s) exceed {args.threshold:g}x**")
             for item in violations:
@@ -351,11 +446,16 @@ def main():
         report = {
             "env": dict(e.split("=", 1) for e in args.env),
             "threshold": args.threshold,
+            "clock_ghz": clocks,
             "benchmarks": {row["op"]: {"ns": {k: jsonable(v) for k, v in row["ns"].items()},
+                                      "cycles": {k: jsonable(v)
+                                                 for k, v in row["cycles"].items()},
                                       "ratios": row["ratios"]}
                            for row in ops},
             "latency": {row["op"]: {k: jsonable(v) for k, v in row["ns"].items()}
                         for row in latency},
+            "latency_cycles": {row["op"]: {k: jsonable(v) for k, v in row["cycles"].items()}
+                               for row in latency},
             "violations": violations,
             "warnings": warnings,
             "checksum_mismatches": checksum_mismatch,

@@ -13,6 +13,9 @@
 //!         -- --out bench/out/rust.csv
 //! ```
 //!
+//! With `--clock` it instead prints the measured core clock in GHz and exits;
+//! `bench/README.md` describes how the clock is used.
+//!
 //! Copyright (C) 2023-2025 Markus Wallerberger and others
 //! SPDX-License-Identifier: MIT
 
@@ -396,12 +399,105 @@ fn time_latency<T: Value>(
 }
 
 // ---------------------------------------------------------------------------
+// Clock
+//
+// `--clock` prints the core clock in GHz, which `bench/compare.py` uses to
+// convert every column to cycles per element.  The clock is measured rather
+// than read from the system: under load the core runs at a frequency that
+// `/proc/cpuinfo` does not show (2.48 GHz reported against 3.09 GHz measured
+// on an EPYC 7713P), and a virtual machine reports its nominal frequency.
+
+/// Dependent additions per iteration of `add_chain`.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+const CHAIN_ADDS: u64 = 16;
+
+/// Runs `iters` iterations of `CHAIN_ADDS` dependent integer additions.  An
+/// addition has a latency of one cycle, so the loop takes `CHAIN_ADDS * iters`
+/// cycles; the loop counter is a separate, shorter chain.
+///
+/// The addend is a register on purpose.  Golden Cove, Raptor Cove and
+/// Gracemont execute dependent additions of small immediates in the renamer,
+/// up to six per cycle (A. Ertl, "Zero-cycle constant adds",
+/// <https://www.complang.tuwien.ac.at/anton/additions/>), which would
+/// overstate the clock sixfold; register-register additions keep their
+/// one-cycle latency there.
+#[cfg(target_arch = "x86_64")]
+fn add_chain(iters: u64) {
+    // SAFETY: the loop reads and writes only the registers declared below.
+    unsafe {
+        std::arch::asm!(
+            "2:",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "add {x}, {one}", "add {x}, {one}", "add {x}, {one}", "add {x}, {one}",
+            "dec {n}",
+            "jnz 2b",
+            x = inout(reg) 0u64 => _,
+            n = inout(reg) iters => _,
+            one = in(reg) 1u64,
+            options(nomem, nostack),
+        );
+    }
+}
+
+/// See the `x86_64` version.
+#[cfg(target_arch = "aarch64")]
+fn add_chain(iters: u64) {
+    // SAFETY: the loop reads and writes only the registers declared below.
+    unsafe {
+        std::arch::asm!(
+            "2:",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}", "add {x}, {x}, {one}", "add {x}, {x}, {one}",
+            "add {x}, {x}, {one}",
+            "subs {n}, {n}, #1",
+            "b.ne 2b",
+            x = inout(reg) 0u64 => _,
+            n = inout(reg) iters => _,
+            one = in(reg) 1u64,
+            options(nomem, nostack),
+        );
+    }
+}
+
+/// Core clock in GHz: the median rate of `add_chain` over `reps` runs of
+/// about 5 ms each, after 0.1 s of the same work so that a frequency governor
+/// has ramped the core up.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn measure_clock_ghz(reps: usize) -> f64 {
+    const ITERS: u64 = 1 << 20;
+    let warm_up = Instant::now();
+    while warm_up.elapsed().as_millis() < 100 {
+        add_chain(ITERS);
+    }
+    let mut samples: Vec<f64> = (0..reps)
+        .map(|_| {
+            let start = Instant::now();
+            add_chain(ITERS);
+            (CHAIN_ADDS * ITERS) as f64 / start.elapsed().as_nanos() as f64
+        })
+        .collect();
+    median(&mut samples)
+}
+
+/// No probe for this architecture: `compare.py` then reports ns only.
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+fn measure_clock_ghz(_reps: usize) -> f64 {
+    f64::NAN
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 
 struct Args {
     out: String,
     n: usize,
     reps: usize,
+    clock: bool,
 }
 
 fn parse_args() -> Args {
@@ -409,10 +505,16 @@ fn parse_args() -> Args {
         out: "bench/out/rust.csv".to_string(),
         n: 16384,
         reps: 15,
+        clock: false,
     };
     let argv: Vec<String> = env::args().skip(1).collect();
     let mut i = 0;
     while i < argv.len() {
+        if argv[i] == "--clock" {
+            args.clock = true;
+            i += 1;
+            continue;
+        }
         let take = |i: usize| -> String {
             argv.get(i + 1)
                 .unwrap_or_else(|| panic!("missing value for {}", argv[i]))
@@ -431,6 +533,11 @@ fn parse_args() -> Args {
 
 fn main() {
     let args = parse_args();
+    if args.clock {
+        // Nothing but the number, so that a shell can capture it.
+        println!("{:.4}", measure_clock_ghz(args.reps));
+        return;
+    }
     if let Some(parent) = Path::new(&args.out).parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).unwrap();

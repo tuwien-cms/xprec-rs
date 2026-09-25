@@ -90,6 +90,7 @@ jobs:
       # how well each runtime parallelises.
       JULIA_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
+      XPREC_BENCH: bench/rust/target/release/xprec-bench
     steps:
       - uses: actions/checkout@v5
 
@@ -126,19 +127,23 @@ jobs:
         continue-on-error: true
         run: julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
 
+      # Each harness step first measures the core clock with
+      # `xprec-bench --clock` on the same core, so that `compare.py` can
+      # convert that harness's column to cycles per element.
       - name: Run Rust benchmark
         run: |
           CORE=$(( $(nproc) - 1 ))
           RUSTFLAGS="-C target-feature=+fma,+avx2" \
-              taskset -c "$CORE" cargo run --release \
-                  --manifest-path bench/rust/Cargo.toml \
-                  -- --out bench/out/rust.csv
+              cargo build --release --manifest-path bench/rust/Cargo.toml
+          echo "CLOCK_RUST=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
+          taskset -c "$CORE" "$XPREC_BENCH" --out bench/out/rust.csv
 
       - name: Run Julia benchmark
         if: steps.julia_deps.outcome == 'success'
         continue-on-error: true
         run: |
           CORE=$(( $(nproc) - 1 ))
+          echo "CLOCK_JULIA=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
           taskset -c "$CORE" julia --project=bench/julia bench/julia/bench.jl \
               --out bench/out/julia.csv
 
@@ -147,6 +152,7 @@ jobs:
         continue-on-error: true
         run: |
           CORE=$(( $(nproc) - 1 ))
+          echo "CLOCK_PYTHON=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
           taskset -c "$CORE" python bench/python/bench.py --out bench/out/python.csv
 
       - name: Compare
@@ -166,6 +172,9 @@ jobs:
               --threshold 100 \
               --json bench/out/report.json \
               --markdown bench/out/report.md \
+              --clock "rust=${CLOCK_RUST:-}" \
+              --clock "julia=${CLOCK_JULIA:-}" \
+              --clock "python=${CLOCK_PYTHON:-}" \
               --github \
               --env "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               --env "git=${GITHUB_REPOSITORY}@${GITHUB_SHA}" \

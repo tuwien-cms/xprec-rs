@@ -36,22 +36,30 @@ Running
 ```sh
 # Rust (its own crate; see bench/rust/Cargo.toml for why)
 RUSTFLAGS="-C target-feature=+fma,+avx2" \
-    taskset -c 2 cargo run --release --manifest-path bench/rust/Cargo.toml \
-        -- --out bench/out/rust.csv
+    cargo build --release --manifest-path bench/rust/Cargo.toml
+BENCH=bench/rust/target/release/xprec-bench
+CLOCK_RUST=$(taskset -c 2 $BENCH --clock)
+taskset -c 2 $BENCH --out bench/out/rust.csv
 
 # Julia (needs MultiFloats, see bench/julia/Project.toml)
 julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
+CLOCK_JULIA=$(taskset -c 2 $BENCH --clock)
 taskset -c 2 julia --project=bench/julia bench/julia/bench.jl --out bench/out/julia.csv
 
 # Python (needs numpy and the xprec numpy extension)
 pip install -r bench/python/requirements.txt
+CLOCK_PYTHON=$(taskset -c 2 $BENCH --clock)
 taskset -c 2 python bench/python/bench.py --out bench/out/python.csv
 
 # Merge
 python bench/compare.py --rust bench/out/rust.csv \
     --julia bench/out/julia.csv --python bench/out/python.csv \
+    --clock rust=$CLOCK_RUST --clock julia=$CLOCK_JULIA --clock python=$CLOCK_PYTHON \
     --threshold 100 --json bench/out/report.json --markdown bench/out/report.md
 ```
+
+`xprec-bench --clock` prints the core clock in GHz (see "Cycles" below).  The
+`--clock` arguments are optional; without them the report is in ns only.
 
 `compare.py` exits non-zero when an operation is more than `--threshold`
 times slower than a baseline, or when two harnesses disagree about the input
@@ -101,6 +109,24 @@ how much of a cheap operation's cost is measurement overhead, and the
 **`muladd`** row is the FMA canary.  Both are harness diagnostics rather than
 library operations: they are excluded from the threshold and are never listed
 as an unimplemented feature when a harness does not provide them.
+
+**Cycles.**  `xprec-bench --clock` measures the core clock as the rate of a
+chain of dependent register-register integer additions, each of which takes
+one cycle on every x86-64 and AArch64 core.  Additions of an immediate would
+not do: Golden Cove, Raptor Cove and Gracemont execute chains of those in the
+renamer at up to six per cycle ([A. Ertl, "Zero-cycle constant
+adds"](https://www.complang.tuwien.ac.at/anton/additions/)).  The workflow runs
+the probe on the benchmark core right before each harness and passes the three
+readings to `compare.py --clock`, which then prints every table a second time
+in cycles per element (ns times the clock of the harness that produced the
+column) and warns when the readings differ by more than 5%.  The threshold
+still uses the ratios of the ns values.  The clock is measured rather than
+read from the system because the two disagree: under load the EPYC 7713P
+development machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports
+2.48 GHz, and a virtual machine reports a nominal frequency.  A cycle count
+assumes that the clock did not move between the probe and the harness; turbo
+and thermal limits, and the AVX frequency offsets of some Intel cores, can
+move it.
 
 **Identical inputs.**  All three harnesses generate the inputs from the same
 integer recipe, so no file needs to be shipped and the values are bit-identical
@@ -180,12 +206,11 @@ Known limitations
 * Everything runs single threaded (`JULIA_NUM_THREADS=1`,
   `OMP_NUM_THREADS=1`, pinned to one core) so that the numbers do not measure
   how well each runtime parallelises.
-* Cross-implementation ratios are used, never absolute timings, because the
-  host CPU and its clock frequency are not controlled.  Run all three
-  harnesses back to back on one machine, pinned to one core, for a meaningful
-  comparison.  On the development machine the `schedutil` governor runs the
-  EPYC 7713P at 1.5 GHz, which inflates every absolute number but cancels in
-  the ratios.
+* The threshold uses cross-implementation ratios, never absolute timings,
+  because the host CPU and its clock frequency are not controlled.  Run all
+  three harnesses back to back on one machine, pinned to one core, for a
+  meaningful comparison.  The cycles tables take the clock out of the
+  absolute numbers, but not the microarchitecture.
 * The three harnesses have different floors (the `noop` row): a scalar Rust
   loop is more expensive than a vectorised Julia loop, and a numpy ufunc call
   allocates a result array.  This matters for cheap operations (`add`, `mul`)
