@@ -258,6 +258,37 @@ fn apply_q(op: Op, a: Df64, b: Df64) -> Df64 {
     }
 }
 
+/// A benchmarked value type: `f64` or `Df64`.
+trait Value: Copy {
+    const ONE: Self;
+
+    /// Folds every limb into one `f64`, which the timing loops accumulate.
+    ///
+    /// This must depend on the whole result.  Accumulating only `hi` lets the
+    /// compiler delete every instruction that feeds only `lo` (for example
+    /// the error term of the final `fast_two_sum` of a multiplication), and
+    /// the operation is then timed without part of its work.
+    fn reduce(self) -> f64;
+}
+
+impl Value for f64 {
+    const ONE: f64 = 1.0;
+
+    #[inline(always)]
+    fn reduce(self) -> f64 {
+        self
+    }
+}
+
+impl Value for Df64 {
+    const ONE: Df64 = Df64::ONE;
+
+    #[inline(always)]
+    fn reduce(self) -> f64 {
+        self.hi() + self.lo()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Timing
 
@@ -271,12 +302,7 @@ fn median(samples: &mut [f64]) -> f64 {
 /// operations.  Iterating with `chunks_exact` keeps the indexing unchecked so
 /// that the backend can vectorise the loop, matching what a Julia or NumPy
 /// broadcast does.
-fn time_throughput<T: Copy>(
-    a: &[T],
-    b: &[T],
-    reps: usize,
-    mut f: impl FnMut(T, T) -> f64,
-) -> f64 {
+fn time_throughput<T: Value>(a: &[T], b: &[T], reps: usize, f: impl Fn(T, T) -> T) -> f64 {
     let n = a.len();
     let mut samples = Vec::with_capacity(reps);
     for _ in 0..reps {
@@ -285,13 +311,13 @@ fn time_throughput<T: Copy>(
         let mut cb = b.chunks_exact(4);
         let start = Instant::now();
         for (x, y) in ca.by_ref().zip(cb.by_ref()) {
-            s0 += f(x[0], y[0]);
-            s1 += f(x[1], y[1]);
-            s2 += f(x[2], y[2]);
-            s3 += f(x[3], y[3]);
+            s0 += f(x[0], y[0]).reduce();
+            s1 += f(x[1], y[1]).reduce();
+            s2 += f(x[2], y[2]).reduce();
+            s3 += f(x[3], y[3]).reduce();
         }
         for (x, y) in ca.remainder().iter().zip(cb.remainder().iter()) {
-            s0 += f(*x, *y);
+            s0 += f(*x, *y).reduce();
         }
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
         black_box((s0, s1, s2, s3));
@@ -303,60 +329,35 @@ fn time_throughput<T: Copy>(
 /// Dependent (latency) form.  Informational only: several transcendental
 /// operations degenerate (fixed point or NaN) when chained, so this is not
 /// used for the regression threshold.
-fn time_latency_f64(op: Op, a: &[f64], b: &[f64], reps: usize) -> f64 {
+fn time_latency<T: Value>(
+    a: &[T],
+    b: &[T],
+    reps: usize,
+    binary: bool,
+    f: impl Fn(T, T) -> T,
+) -> f64 {
     let n = a.len();
-    let binary = is_binary(op);
     let mut samples = Vec::with_capacity(reps);
     let mut degenerate = false;
     for _ in 0..reps {
-        let mut acc = 1.0f64;
+        let mut acc = T::ONE;
         let start = Instant::now();
         if binary {
             for i in 0..n {
-                acc = apply_f64(op, black_box(a[i]), acc);
+                acc = f(black_box(a[i]), acc);
             }
         } else {
             for i in 0..n {
-                acc = apply_f64(op, black_box(acc), black_box(b[i]));
+                acc = f(black_box(acc), black_box(b[i]));
             }
         }
         let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        degenerate |= !acc.is_finite();
+        degenerate |= !acc.reduce().is_finite();
         black_box(acc);
         samples.push(dt);
     }
     // A chain that drives the accumulator to infinity or NaN no longer
     // measures the operation, only the special-value branch that catches it.
-    if degenerate {
-        return f64::NAN;
-    }
-    median(&mut samples)
-}
-
-fn time_latency_q(op: Op, a: &[Df64], b: &[Df64], reps: usize) -> f64 {
-    let n = a.len();
-    let binary = is_binary(op);
-    let mut samples = Vec::with_capacity(reps);
-    let mut degenerate = false;
-    for _ in 0..reps {
-        let mut acc = Df64::ONE;
-        let start = Instant::now();
-        if binary {
-            for i in 0..n {
-                acc = apply_q(op, black_box(a[i]), acc);
-            }
-        } else {
-            for i in 0..n {
-                acc = apply_q(op, black_box(acc), black_box(b[i]));
-            }
-        }
-        let dt = start.elapsed().as_nanos() as f64 / n as f64;
-        degenerate |= !acc.hi().is_finite();
-        black_box(acc);
-        samples.push(dt);
-    }
-    // See `time_latency_f64`: an overflowed chain measures the branch, not the
-    // operation.
     if degenerate {
         return f64::NAN;
     }
@@ -428,13 +429,14 @@ fn main() {
     for (op, name) in OPS {
         let (a64, b64, checksum) = generate(*op, args.n);
 
+        let binary = is_binary(*op);
         let f_thr = time_throughput(&a64, &b64, args.reps, |x, y| apply_f64(*op, x, y));
-        let f_lat = time_latency_f64(*op, &a64, &b64, args.reps);
+        let f_lat = time_latency(&a64, &b64, args.reps, binary, |x, y| apply_f64(*op, x, y));
 
         let aq: Vec<Df64> = a64.iter().map(|x| Df64::from(*x)).collect();
         let bq: Vec<Df64> = b64.iter().map(|x| Df64::from(*x)).collect();
-        let q_thr = time_throughput(&aq, &bq, args.reps, |x, y| apply_q(*op, x, y).hi());
-        let q_lat = time_latency_q(*op, &aq, &bq, args.reps);
+        let q_thr = time_throughput(&aq, &bq, args.reps, |x, y| apply_q(*op, x, y));
+        let q_lat = time_latency(&aq, &bq, args.reps, binary, |x, y| apply_q(*op, x, y));
 
         println!(
             "{:<8} {:>12.4} {:>12.4} {:>12.4} {:>12.4} {:#018x}",

@@ -159,9 +159,13 @@ function op_function(op::AbstractString)
 end
 
 # Reduce a benchmark value to a plain Float64 so that the accumulation loop is
-# identical for both element types.  `_limbs[1]` is the leading limb.
+# identical for both element types.  This must depend on every limb:
+# accumulating only the leading one lets the compiler delete everything that
+# feeds only the trailing one (for example the error term of the final
+# `fast_two_sum` of a division), and the operation is then timed without part
+# of its work.
 @inline reduce_value(x::Float64) = x
-@inline reduce_value(x::Float64x2) = x._limbs[1]
+@inline reduce_value(x::Float64x2) = x._limbs[1] + x._limbs[2]
 
 # ---------------------------------------------------------------------------
 # Timing
