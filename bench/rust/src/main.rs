@@ -289,6 +289,31 @@ impl Value for Df64 {
     }
 }
 
+/// Evaluates `$body` with `$k` bound to the operation `$op` as a constant,
+/// through one `match` arm per operation.
+///
+/// Each arm creates its own closures, so every timing loop is compiled for a
+/// single operation and `apply_f64`/`apply_q` fold to one arm.  A closure that
+/// captures the operation at run time is instead compiled once for all of
+/// them and dispatches on it per element, through an out-of-line call and a
+/// jump table, which multiplies the harness floor and prevents vectorisation.
+/// The `match` is exhaustive, so a new `Op` must be listed here as well.
+macro_rules! specialise {
+    ($op:expr, |$k:ident| $body:expr) => {
+        specialise!(@arms $op, $k, $body;
+            Noop MulAdd Add Sub Mul Div Sqrt Exp Exp2 Log Log2 Log10 Powi Powf
+            Sin Cos Tan Atan Atan2 Sinh Cosh Tanh Expm1 Log1p)
+    };
+    (@arms $op:expr, $k:ident, $body:expr; $($variant:ident)*) => {
+        match $op {
+            $(Op::$variant => {
+                const $k: Op = Op::$variant;
+                $body
+            })*
+        }
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Timing
 
@@ -429,14 +454,19 @@ fn main() {
     for (op, name) in OPS {
         let (a64, b64, checksum) = generate(*op, args.n);
 
-        let binary = is_binary(*op);
-        let f_thr = time_throughput(&a64, &b64, args.reps, |x, y| apply_f64(*op, x, y));
-        let f_lat = time_latency(&a64, &b64, args.reps, binary, |x, y| apply_f64(*op, x, y));
-
         let aq: Vec<Df64> = a64.iter().map(|x| Df64::from(*x)).collect();
         let bq: Vec<Df64> = b64.iter().map(|x| Df64::from(*x)).collect();
-        let q_thr = time_throughput(&aq, &bq, args.reps, |x, y| apply_q(*op, x, y));
-        let q_lat = time_latency(&aq, &bq, args.reps, binary, |x, y| apply_q(*op, x, y));
+
+        let [f_thr, f_lat, q_thr, q_lat] = specialise!(*op, |OP| {
+            let reps = args.reps;
+            let binary = is_binary(OP);
+            [
+                time_throughput(&a64, &b64, reps, |x, y| apply_f64(OP, x, y)),
+                time_latency(&a64, &b64, reps, binary, |x, y| apply_f64(OP, x, y)),
+                time_throughput(&aq, &bq, reps, |x, y| apply_q(OP, x, y)),
+                time_latency(&aq, &bq, reps, binary, |x, y| apply_q(OP, x, y)),
+            ]
+        });
 
         println!(
             "{:<8} {:>12.4} {:>12.4} {:>12.4} {:>12.4} {:#018x}",
