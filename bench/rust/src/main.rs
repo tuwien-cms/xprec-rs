@@ -337,12 +337,12 @@ fn time_throughput<T: Value>(a: &[T], b: &[T], reps: usize, f: impl Fn(T, T) -> 
         let mut ca = a.chunks_exact(4);
         let mut cb = b.chunks_exact(4);
         let start = Instant::now();
-        // The accumulators must not be live across a call: every vector
-        // register is caller-saved, so the compiler would keep them on the
-        // stack and load and store them in every iteration.  They are
-        // therefore created after the first clock read and consumed before
-        // the second.  `black_box` takes their sum, not the tuple: a tuple
-        // made the vectoriser split them across narrower registers.
+        // The accumulators must not be live across a call.  Every vector
+        // register is caller-saved, and when they were, the compiler kept them
+        // on the stack and loaded and stored them in every iteration.  They
+        // are therefore created after the first clock read and consumed
+        // before the second.  `black_box` takes their sum, not the tuple: a
+        // tuple made the vectoriser split them across narrower registers.
         let (mut s0, mut s1, mut s2, mut s3) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
         for (x, y) in ca.by_ref().zip(cb.by_ref()) {
             s0 += f(x[0], y[0]).reduce();

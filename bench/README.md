@@ -126,12 +126,11 @@ readings to `compare.py --clock`, which then prints every table a second time
 in cycles per element (ns times the mean clock around the harness that
 produced the column) and warns when two readings for one harness, or the
 means of two harnesses, differ by more than 5%.  The threshold still uses the
-ratios of the ns values.  The clock is measured rather than
-read from the system because the two disagree: under load the EPYC 7713P
-development machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports
-2.48 GHz, and a virtual machine reports a nominal frequency.  A cycle count
-assumes that the clock during the harness was the one the probe saw around
-it.  That is not guaranteed: the frequency follows the load on the other
+ratios of the ns values.  The clock is measured rather than read from the
+system because the two disagree: under load the EPYC 7713P development
+machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports 2.48 GHz, and a
+virtual machine reports a nominal frequency.  A cycle count assumes that the
+clock during the harness was the one the probe saw around it.  That is not guaranteed: the frequency follows the load on the other
 cores, turbo and thermal limits, and the AVX offsets of some Intel cores, and
 on the development machine one probe read 3.69 GHz right before a Julia run
 whose timings matched those of a run at 3.09 GHz.  The readings after the
@@ -267,8 +266,8 @@ Known limitations
   three harnesses back to back on one machine, pinned to one core, for a
   meaningful comparison.  The cycles tables take the clock out of the
   absolute numbers, but not the microarchitecture.
-* The harnesses do not share a floor.  The Rust and Julia loops are both
-  under one cycle per element (the `noop` row), but a numpy ufunc call
+* The harnesses do not share a floor.  The Rust and Julia loops both cost
+  about one cycle per element (the `noop` row), but a numpy ufunc call
   allocates its result array, and the Python harness has no `noop` row to
   show what that costs.  This matters for cheap operations (`add`, `mul`)
   and is invisible for the expensive ones that the 100x threshold targets.
