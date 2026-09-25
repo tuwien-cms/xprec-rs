@@ -269,8 +269,10 @@ function main()
         amf = Float64x2.(a64)
         bmf = Float64x2.(b64)
 
+        # `@inbounds` matches the unchecked `chunks_exact` loop of the Rust
+        # harness: a bounds check per element keeps the loop scalar.
         f = op_function(op)
-        thr = time_throughput(n, reps, i -> f(amf[i], bmf[i]))
+        thr = time_throughput(n, reps, i -> @inbounds f(amf[i], bmf[i]))
         lat = time_latency(op, amf, bmf, reps)
 
         @printf("%-8s %12.4f %12.4f 0x%016x\n", op, thr, lat, checksum)
