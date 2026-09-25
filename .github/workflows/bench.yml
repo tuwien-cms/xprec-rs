@@ -127,33 +127,37 @@ jobs:
         continue-on-error: true
         run: julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
 
-      # Each harness step first measures the core clock with
-      # `xprec-bench --clock` on the same core, so that `compare.py` can
-      # convert that harness's column to cycles per element.
+      # Each harness step reads the core clock with `xprec-bench --clock` on
+      # the same core before and after the harness, so that `compare.py` can
+      # convert that harness's column to cycles per element and warn when the
+      # clock moved in between.
       - name: Run Rust benchmark
         run: |
           CORE=$(( $(nproc) - 1 ))
           RUSTFLAGS="-C target-feature=+fma,+avx2" \
               cargo build --release --manifest-path bench/rust/Cargo.toml
-          echo "CLOCK_RUST=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
+          BEFORE=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)
           taskset -c "$CORE" "$XPREC_BENCH" --out bench/out/rust.csv
+          echo "CLOCK_RUST=$BEFORE,$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
 
       - name: Run Julia benchmark
         if: steps.julia_deps.outcome == 'success'
         continue-on-error: true
         run: |
           CORE=$(( $(nproc) - 1 ))
-          echo "CLOCK_JULIA=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
+          BEFORE=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)
           taskset -c "$CORE" julia --project=bench/julia bench/julia/bench.jl \
               --out bench/out/julia.csv
+          echo "CLOCK_JULIA=$BEFORE,$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
 
       - name: Run Python benchmark
         if: steps.python_deps.outcome == 'success'
         continue-on-error: true
         run: |
           CORE=$(( $(nproc) - 1 ))
-          echo "CLOCK_PYTHON=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
+          BEFORE=$(taskset -c "$CORE" "$XPREC_BENCH" --clock)
           taskset -c "$CORE" python bench/python/bench.py --out bench/out/python.csv
+          echo "CLOCK_PYTHON=$BEFORE,$(taskset -c "$CORE" "$XPREC_BENCH" --clock)" >> "$GITHUB_ENV"
 
       - name: Compare
         run: |

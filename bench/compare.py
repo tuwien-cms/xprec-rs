@@ -11,10 +11,11 @@ Usage:
 
     python bench/compare.py --rust out/rust.csv --julia out/julia.csv \
         --python out/python.csv --threshold 100 --json out/report.json \
-        --clock rust=3.09 --clock julia=3.08 --clock python=3.09
+        --clock rust=3.09,3.10 --clock julia=3.08,3.09 --clock python=3.09,3.09
 
-``--clock`` takes the readings of ``xprec-bench --clock`` and adds tables in
-cycles per element; without it the report is in ns only.
+``--clock`` takes the readings of ``xprec-bench --clock`` taken before and
+after each harness and adds tables in cycles per element; without it the
+report is in ns only.
 
 Copyright (C) 2023-2025 Markus Wallerberger and others
 SPDX-License-Identifier: MIT
@@ -48,8 +49,9 @@ SOURCE_IMPLS = {
 }
 IMPL_SOURCE = {impl: name for name, impls in SOURCE_IMPLS.items() for impl in impls}
 
-# The clocks passed with `--clock` are measured right before each harness, so
-# a large spread between them means the frequency moved during the run.
+# The clock readings passed with `--clock` are taken before and after each
+# harness.  When they differ by more than this, the frequency moved and the
+# cycles are uncertain by about as much.
 CLOCK_SPREAD_MAX = 1.05
 
 # Harness sanity check: without hardware FMA, `mul_add` falls back to libm and
@@ -82,25 +84,27 @@ def read_csv(path):
 
 
 def parse_clocks(specs):
-    """Return `{source: GHz}` from `--clock` values.
+    """Return `{source: [GHz, ...]}` from `--clock` values.
 
-    A value is either `source=GHz`, for one harness, or a bare `GHz`, for all
-    of them.  An empty or non-finite reading (a probe that did not run, or an
-    architecture without one) is dropped, so that harness gets no cycles.
+    A value is `source=GHz[,GHz...]`, for one harness, or a bare
+    `GHz[,GHz...]`, for all of them.  An empty or non-finite reading (a probe
+    that did not run, or an architecture without one) is dropped, and a
+    harness without readings gets no cycles.
     """
-    clocks = {}
+    readings = {}
     for spec in specs:
-        name, sep, value = spec.rpartition("=")
+        name, sep, values = spec.rpartition("=")
         if sep and name not in SOURCE_IMPLS:
             raise SystemExit(f"--clock: unknown harness {name!r} in {spec!r}")
-        try:
-            ghz = float(value)
-        except ValueError:
-            continue
-        if math.isfinite(ghz) and ghz > 0:
-            for source in [name] if sep else SOURCE_IMPLS:
-                clocks[source] = ghz
-    return clocks
+        for value in values.split(","):
+            try:
+                ghz = float(value)
+            except ValueError:
+                continue
+            if math.isfinite(ghz) and ghz > 0:
+                for source in [name] if sep else SOURCE_IMPLS:
+                    readings.setdefault(source, []).append(ghz)
+    return readings
 
 
 def fmt_ns(value):
@@ -145,12 +149,14 @@ def main():
     parser.add_argument("--env", action="append", default=[],
                         help="extra `key=value` line for the report header")
     parser.add_argument("--clock", action="append", default=[],
-                        help="core clock in GHz measured right before a harness "
-                             "ran (`xprec-bench --clock`), as `rust=GHz`, "
-                             "`julia=GHz`, `python=GHz`, or a bare `GHz` for "
+                        help="core clock in GHz (`xprec-bench --clock`) read "
+                             "before and after a harness, as `rust=GHz,GHz`, "
+                             "`julia=...`, `python=...`, or without a name for "
                              "all; adds the tables in cycles per element")
     args = parser.parse_args()
-    clocks = parse_clocks(args.clock)
+    clock_readings = parse_clocks(args.clock)
+    clocks = {name: sum(values) / len(values)
+              for name, values in clock_readings.items()}
 
     sources = {
         "rust": read_csv(args.rust),
@@ -193,11 +199,19 @@ def main():
     # --- clocks -------------------------------------------------------------
     clock_text = ", ".join(f"{name} {clocks[name]:.2f} GHz"
                            for name in SOURCE_IMPLS if name in clocks)
+    for name in SOURCE_IMPLS:
+        values = clock_readings.get(name, [])
+        if len(values) > 1 and max(values) / min(values) > CLOCK_SPREAD_MAX:
+            warnings.append(
+                f"the clock moved during the {name} harness "
+                f"({', '.join(f'{v:.2f}' for v in values)} GHz); its cycles are "
+                f"uncertain by {100 * (max(values) / min(values) - 1):.0f}%"
+            )
     if len(clocks) > 1:
         spread = max(clocks.values()) / min(clocks.values())
         if spread > CLOCK_SPREAD_MAX:
             warnings.append(
-                f"the clock moved by {100 * (spread - 1):.0f}% between harnesses "
+                f"the clock differs by {100 * (spread - 1):.0f}% between harnesses "
                 f"({clock_text}); the ns ratios compare different frequencies, "
                 "the cycles do not"
             )
@@ -307,7 +321,7 @@ def main():
                  f"({len(checksum_mismatch)} checksum mismatches)")
     lines.append(f"threshold      {args.threshold:g}x (vs {'/'.join(BASELINES)})")
     if clocks:
-        lines.append(f"clock          {clock_text} (measured right before each harness)")
+        lines.append(f"clock          {clock_text} (mean of the readings around each harness)")
     else:
         lines.append("clock          not measured, so no cycles tables (see --clock)")
     lines.append("")
@@ -336,8 +350,8 @@ def main():
     lines.append("")
     lines.append("NOTES")
     lines.append("  * units are ns per element, median of the harness repetitions;")
-    lines.append("    the cycles tables multiply each column by the clock measured")
-    lines.append("    right before the harness that produced it")
+    lines.append("    the cycles tables multiply each column by the mean clock read")
+    lines.append("    before and after the harness that produced it")
     lines.append("  * the latency rows chain the operation into itself; where that")
     lines.append("    drives the accumulator to infinity or NaN the cell reads")
     lines.append("    `degenerate`, because the number would time the special-value")
@@ -424,7 +438,7 @@ def main():
                                fmt_cell_cycles, clocked(latency_cols))
         md.append("")
         if clocks:
-            md.append(f"Clock measured right before each harness: {clock_text}.")
+            md.append(f"Clock (mean of the readings around each harness): {clock_text}.")
             md.append("")
         if violations:
             md.append(f"**{len(violations)} operation(s) exceed {args.threshold:g}x**")
@@ -447,6 +461,7 @@ def main():
             "env": dict(e.split("=", 1) for e in args.env),
             "threshold": args.threshold,
             "clock_ghz": clocks,
+            "clock_readings_ghz": clock_readings,
             "benchmarks": {row["op"]: {"ns": {k: jsonable(v) for k, v in row["ns"].items()},
                                       "cycles": {k: jsonable(v)
                                                  for k, v in row["cycles"].items()},

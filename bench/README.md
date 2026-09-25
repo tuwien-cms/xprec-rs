@@ -38,18 +38,22 @@ Running
 RUSTFLAGS="-C target-feature=+fma,+avx2" \
     cargo build --release --manifest-path bench/rust/Cargo.toml
 BENCH=bench/rust/target/release/xprec-bench
-CLOCK_RUST=$(taskset -c 2 $BENCH --clock)
+clock() { taskset -c 2 $BENCH --clock; }    # core clock in GHz, see "Cycles"
+CLOCK_RUST=$(clock)
 taskset -c 2 $BENCH --out bench/out/rust.csv
+CLOCK_RUST=$CLOCK_RUST,$(clock)
 
 # Julia (needs MultiFloats, see bench/julia/Project.toml)
 julia --project=bench/julia -e 'using Pkg; Pkg.instantiate()'
-CLOCK_JULIA=$(taskset -c 2 $BENCH --clock)
+CLOCK_JULIA=$(clock)
 taskset -c 2 julia --project=bench/julia bench/julia/bench.jl --out bench/out/julia.csv
+CLOCK_JULIA=$CLOCK_JULIA,$(clock)
 
 # Python (needs numpy and the xprec numpy extension)
 pip install -r bench/python/requirements.txt
-CLOCK_PYTHON=$(taskset -c 2 $BENCH --clock)
+CLOCK_PYTHON=$(clock)
 taskset -c 2 python bench/python/bench.py --out bench/out/python.csv
+CLOCK_PYTHON=$CLOCK_PYTHON,$(clock)
 
 # Merge
 python bench/compare.py --rust bench/out/rust.csv \
@@ -58,8 +62,7 @@ python bench/compare.py --rust bench/out/rust.csv \
     --threshold 100 --json bench/out/report.json --markdown bench/out/report.md
 ```
 
-`xprec-bench --clock` prints the core clock in GHz (see "Cycles" below).  The
-`--clock` arguments are optional; without them the report is in ns only.
+The `--clock` arguments are optional; without them the report is in ns only.
 
 `compare.py` exits non-zero when an operation is more than `--threshold`
 times slower than a baseline, or when two harnesses disagree about the input
@@ -118,17 +121,21 @@ one cycle on every x86-64 and AArch64 core.  Additions of an immediate would
 not do: Golden Cove, Raptor Cove and Gracemont execute chains of those in the
 renamer at up to six per cycle ([A. Ertl, "Zero-cycle constant
 adds"](https://www.complang.tuwien.ac.at/anton/additions/)).  The workflow runs
-the probe on the benchmark core right before each harness and passes the three
+the probe on the benchmark core before and after each harness and passes the
 readings to `compare.py --clock`, which then prints every table a second time
-in cycles per element (ns times the clock of the harness that produced the
-column) and warns when the readings differ by more than 5%.  The threshold
-still uses the ratios of the ns values.  The clock is measured rather than
+in cycles per element (ns times the mean clock around the harness that
+produced the column) and warns when two readings for one harness, or the
+means of two harnesses, differ by more than 5%.  The threshold still uses the
+ratios of the ns values.  The clock is measured rather than
 read from the system because the two disagree: under load the EPYC 7713P
 development machine runs at 3.1 to 3.7 GHz while `/proc/cpuinfo` reports
 2.48 GHz, and a virtual machine reports a nominal frequency.  A cycle count
-assumes that the clock did not move between the probe and the harness; turbo
-and thermal limits, and the AVX frequency offsets of some Intel cores, can
-move it.
+assumes that the clock during the harness was the one the probe saw around
+it.  That is not guaranteed: the frequency follows the load on the other
+cores, turbo and thermal limits, and the AVX offsets of some Intel cores, and
+on the development machine one probe read 3.69 GHz right before a Julia run
+whose timings matched those of a run at 3.09 GHz.  The readings after the
+harness are there to catch such a jump.
 
 **Identical inputs.**  All three harnesses generate the inputs from the same
 integer recipe, so no file needs to be shipped and the values are bit-identical
