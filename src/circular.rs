@@ -10,55 +10,52 @@ use super::consts;
 use super::funcs::{abs, copysign};
 use super::utils::reciprocal_factorial;
 
-pub fn sin(x: Df64) -> Df64
-{
+pub fn sin(x: Df64) -> Df64 {
     let (sector, z) = reduce_mod_pi2(x);
     match sector {
         0 => sin_kernel(z),
-        1 => cos_kernel(z),      // sin(x) = cos(x - pi/2)
-        2 => -sin_kernel(z),     // sin(x) = -sin(x - pi)
-        3 => -cos_kernel(z),     // sin(x) = -cos(x + pi/2)
-        _ => panic!("illegal sector")
+        1 => cos_kernel(z),  // sin(x) = cos(x - pi/2)
+        2 => -sin_kernel(z), // sin(x) = -sin(x - pi)
+        3 => -cos_kernel(z), // sin(x) = -cos(x + pi/2)
+        _ => panic!("illegal sector"),
     }
 }
 
-pub fn cos(x: Df64) -> Df64
-{
+pub fn cos(x: Df64) -> Df64 {
     let (sector, z) = reduce_mod_pi2(x);
     match sector {
         0 => cos_kernel(z),
         1 => -sin_kernel(z),
         2 => -cos_kernel(z),
         3 => sin_kernel(z),
-        _ => panic!("illegal sector")
+        _ => panic!("illegal sector"),
     }
 }
 
-pub fn sincos(x: Df64) -> (Df64, Df64)
-{
+pub fn sincos(x: Df64) -> (Df64, Df64) {
     let (sector, z) = reduce_mod_pi2(x);
     let (s, c) = sincos_kernel(z);
     match sector {
-        0 => ( s,  c),
-        1 => ( c, -s),
+        0 => (s, c),
+        1 => (c, -s),
         2 => (-s, -c),
-        3 => (-c,  s),
-        _ => panic!("illegal sector")
+        3 => (-c, s),
+        _ => panic!("illegal sector"),
     }
 }
 
-pub fn tan(x: Df64) -> Df64
-{
+pub fn tan(x: Df64) -> Df64 {
     let (s, c) = sincos(x);
     return s / c;
 }
 
-fn reduce_mod_pi2(x: Df64) -> (i32, Df64)
-{
+fn reduce_mod_pi2(x: Df64) -> (i32, Df64) {
     const INV_PI_HALF: f64 = 2.0 / f64::consts::PI;
     const PI_HALF: f64 = 1.5707963267948966;
-    const PI_HALF_CORR: Df64 =
-            Df64 {hi: 6.123233995736766e-17, lo: -1.4973849048591698e-33};
+    const PI_HALF_CORR: Df64 = Df64 {
+        hi: 6.123233995736766e-17,
+        lo: -1.4973849048591698e-33,
+    };
 
     // Approximate reduction
     let n = (INV_PI_HALF * x.hi).round();
@@ -76,8 +73,7 @@ fn reduce_mod_pi2(x: Df64) -> (i32, Df64)
     return (sector, z);
 }
 
-fn sin_kernel(x: Df64) -> Df64
-{
+fn sin_kernel(x: Df64) -> Df64 {
     // Taylor series of the sin around 0
     assert!(x.hi.abs() <= 0.7854);
     const NQUAD: i32 = 7;
@@ -90,9 +86,9 @@ fn sin_kernel(x: Df64) -> Df64
     let mut xpow = x;
 
     // r += x * (-x*x)**(i) / (2i+1)!
-    for i in 1..NQUAD+1 {
+    for i in 1..NQUAD + 1 {
         xpow *= xsq;
-        r = addfast_qq(r, reciprocal_factorial(2*i + 1) * xpow);
+        r = addfast_qq(r, reciprocal_factorial(2 * i + 1) * xpow);
     }
 
     // Here the terms are so small that they only affect the lo part, so
@@ -100,9 +96,9 @@ fn sin_kernel(x: Df64) -> Df64
     let xsq_d = xsq.hi;
     let mut xpow_d = xpow.hi;
     let mut r_d = 0.0;
-    for i in NQUAD+1..N+1 {
+    for i in NQUAD + 1..N + 1 {
         xpow_d *= xsq_d;
-        r_d += reciprocal_factorial(2*i + 1).hi * xpow_d;
+        r_d += reciprocal_factorial(2 * i + 1).hi * xpow_d;
     }
 
     // Add results together
@@ -110,8 +106,7 @@ fn sin_kernel(x: Df64) -> Df64
     return r;
 }
 
-fn cos_kernel(x: Df64) -> Df64
-{
+fn cos_kernel(x: Df64) -> Df64 {
     // Taylor series of the cosine around 0
     assert!(x.hi.abs() <= 0.7854);
     const NQUAD: i32 = 8;
@@ -124,9 +119,9 @@ fn cos_kernel(x: Df64) -> Df64
     let mut xpow = xsq;
 
     // r += (-x*x)**(i+1) / (2i)!
-    for i in 2..NQUAD+1 {
+    for i in 2..NQUAD + 1 {
         xpow *= xsq;
-        r = addfast_qq(r, reciprocal_factorial(2*i) * xpow);
+        r = addfast_qq(r, reciprocal_factorial(2 * i) * xpow);
     }
 
     // Here the terms are so small that they only affect the lo part, so
@@ -134,9 +129,9 @@ fn cos_kernel(x: Df64) -> Df64
     let xsq_d = xsq.hi;
     let mut xpow_d = xpow.hi;
     let mut r_d = 0.0;
-    for i in NQUAD+1..N+1 {
+    for i in NQUAD + 1..N + 1 {
         xpow_d *= xsq_d;
-        r_d += reciprocal_factorial(2*i).hi * xpow_d;
+        r_d += reciprocal_factorial(2 * i).hi * xpow_d;
     }
 
     // Add results together
@@ -144,15 +139,13 @@ fn cos_kernel(x: Df64) -> Df64
     return r;
 }
 
-fn sincos_kernel(x: Df64) -> (Df64, Df64)
-{
+fn sincos_kernel(x: Df64) -> (Df64, Df64) {
     let s = sin_kernel(x);
     let c = sqrt_q(subfast_dq(1.0, square_q(s)));
     return (s, c);
 }
 
-pub fn asin(x: Df64) -> Df64
-{
+pub fn asin(x: Df64) -> Df64 {
     // Compute a approximation to double precision
     let y0 = x.hi.asin();
     if !y0.is_finite() {
@@ -175,8 +168,7 @@ pub fn asin(x: Df64) -> Df64
     return y;
 }
 
-pub fn acos(x: Df64) -> Df64
-{
+pub fn acos(x: Df64) -> Df64 {
     // Compute a approximation to double precision
     let y0 = x.hi.acos();
     if !y0.is_finite() {
@@ -201,8 +193,7 @@ pub fn acos(x: Df64) -> Df64
     return y;
 }
 
-pub fn atan(x: Df64) -> Df64
-{
+pub fn atan(x: Df64) -> Df64 {
     // For large values, use reflection formula
     if !(x.hi.abs() <= 1.0) {
         if is_nan(x) {
@@ -223,8 +214,7 @@ pub fn atan(x: Df64) -> Df64
     return y;
 }
 
-pub fn atan2(y: Df64, x: Df64) -> Df64
-{
+pub fn atan2(y: Df64, x: Df64) -> Df64 {
     // Special values
     if is_nan(x) || is_nan(y) {
         return Df64::NAN;
@@ -245,15 +235,13 @@ pub fn atan2(y: Df64, x: Df64) -> Df64
     return res;
 }
 
-
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::super::test_utils::*;
+    use super::*;
 
     #[test]
-    fn test_kernels()
-    {
+    fn test_kernels() {
         // small values, start from PI/4
         let mut x = Df64::from(f64::consts::PI / 4.0);
         while x.hi > 1e-290 {
@@ -271,16 +259,15 @@ mod test {
     }
 
     #[test]
-    fn test_circ()
-    {
+    fn test_circ() {
         // small values, start from PI/4
         let mut x = Df64::from(f64::consts::PI / 4.0);
         while x.hi > 1e-290 {
-            check_unary(sin, |x| x.sin(),  x, 1.1);
+            check_unary(sin, |x| x.sin(), x, 1.1);
             check_unary(sin, |x| x.sin(), -x, 1.1);
-            check_unary(cos, |x| x.cos(),  x, 1.1);
+            check_unary(cos, |x| x.cos(), x, 1.1);
             check_unary(cos, |x| x.cos(), -x, 1.1);
-            check_unary(tan, |x| x.tan(),  x, 2.0);
+            check_unary(tan, |x| x.tan(), x, 2.0);
             check_unary(tan, |x| x.tan(), -x, 2.0);
             x *= 0.947;
         }
@@ -289,19 +276,18 @@ mod test {
         x = Df64::from(f64::consts::PI / 4.0);
         while x.hi < 100.0 {
             let magn = x.hi.abs().max(1.0);
-            check_unary(sin, |x| x.sin(),  x, 1.5 * magn);
+            check_unary(sin, |x| x.sin(), x, 1.5 * magn);
             check_unary(sin, |x| x.sin(), -x, 1.5 * magn);
-            check_unary(cos, |x| x.cos(),  x, 1.5 * magn);
+            check_unary(cos, |x| x.cos(), x, 1.5 * magn);
             check_unary(cos, |x| x.cos(), -x, 1.5 * magn);
-            check_unary(tan, |x| x.tan(),  x, 2.5 * magn);
+            check_unary(tan, |x| x.tan(), x, 2.5 * magn);
             check_unary(tan, |x| x.tan(), -x, 2.5 * magn);
             x /= 0.947;
         }
     }
 
     #[test]
-    fn test_acirc()
-    {
+    fn test_acirc() {
         let ulps = 1e-31 / Df64::EPSILON.hi;
 
         // asin
@@ -324,32 +310,68 @@ mod test {
         check_binary(atan2, |y, x| y.atan2(&x), Df64::ZERO, Df64::ZERO, ulps);
         check_binary(atan2, |y, x| y.atan2(&x), Df64::from(0.3), Df64::ZERO, ulps);
         check_binary(atan2, |y, x| y.atan2(&x), Df64::ZERO, Df64::from(1.0), ulps);
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::from(-0.5), Df64::ZERO, ulps);
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::ZERO, Df64::from(-0.1), ulps);
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::from(-0.5),
+            Df64::ZERO,
+            ulps,
+        );
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::ZERO,
+            Df64::from(-0.1),
+            ulps,
+        );
 
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::from(0.5), Df64::from(0.5), ulps);
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::from(0.5), Df64::from(-0.5), ulps);
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::from(-0.5), Df64::from(0.5), ulps);
-        check_binary(atan2, |y, x| y.atan2(&x), Df64::from(-0.5), Df64::from(-0.5), ulps);
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::from(0.5),
+            Df64::from(0.5),
+            ulps,
+        );
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::from(0.5),
+            Df64::from(-0.5),
+            ulps,
+        );
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::from(-0.5),
+            Df64::from(0.5),
+            ulps,
+        );
+        check_binary(
+            atan2,
+            |y, x| y.atan2(&x),
+            Df64::from(-0.5),
+            Df64::from(-0.5),
+            ulps,
+        );
 
         // small values must be very accurate
         let mut x = Df64::from(1.0);
         while x > Df64::from(1e-300) {
             // asin
-            check_unary(asin, |x| x.asin(),  x, ulps);
+            check_unary(asin, |x| x.asin(), x, ulps);
             check_unary(asin, |x| x.asin(), -x, ulps);
             // acos
-            check_unary(acos, |x| x.acos(),  x, ulps);
+            check_unary(acos, |x| x.acos(), x, ulps);
             check_unary(acos, |x| x.acos(), -x, ulps);
             // atan
-            check_unary(atan, |x| x.atan(),  x, ulps);
+            check_unary(atan, |x| x.atan(), x, ulps);
             check_unary(atan, |x| x.atan(), -x, ulps);
             x *= 0.84;
         }
 
         let mut x = Df64::from(1.0);
         while x < Df64::from(1e290) {
-            check_unary(atan, |x| x.atan(),  x, ulps);
+            check_unary(atan, |x| x.atan(), x, ulps);
             check_unary(atan, |x| x.atan(), -x, ulps);
             x /= 0.84;
         }

@@ -1,10 +1,9 @@
 use super::Df64;
-use rug;
-use rug::Float;
 use core::cmp::Ordering;
+use rug::Assign;
+use rug::Float;
 use rug::float::Round;
 use rug::ops::AssignRound;
-use rug::Assign;
 
 pub const PREC: u32 = 120;
 
@@ -26,12 +25,10 @@ impl AssignRound<Df64> for Float {
 ///  * `x`     - argument
 ///  * `ulps`  - relative tolerance in the result as multiples of epsilon
 ///
-pub fn check_unary<A: Copy>(
-        f: fn(A) -> Df64, fref: fn(Float) -> Float,
-        x: A, ulps: f64)
+pub fn check_unary<A: Copy>(f: fn(A) -> Df64, fref: fn(Float) -> Float, x: A, ulps: f64)
 where
     Float: Assign<f64>,
-    Float: Assign<A>
+    Float: Assign<A>,
 {
     const EPSILON: f64 = Df64::EPSILON.hi;
 
@@ -45,7 +42,7 @@ where
 
     let diff = Float::with_val(PREC, &zz - &zz_ref);
     let thr = Float::with_val(PREC, EPSILON * ulps * zz.clone().abs());
-    if !(&diff.abs() <= &thr) {
+    if !(diff.abs() <= thr) {
         // Recompute xx
         let xx = Float::with_val(PREC, x);
         let diff = Float::with_val(PREC, &zz - &zz_ref);
@@ -56,7 +53,8 @@ where
              should be   = {}\n\t\
              instead was = {}\n\t\
              deviation   = {:.3} ulps (exceeds threshold of {:.3} ulps)",
-            &xx, &zz_ref, &zz, ulpsdiff, ulps);
+            xx, zz_ref, zz, ulpsdiff, ulps
+        );
     }
 }
 
@@ -69,9 +67,12 @@ where
 ///  * `ulps`  - relative tolerance in the result as multiples of epsilon
 ///
 pub fn check_binary<A: Copy, B: Copy>(
-        f: fn(A, B) -> Df64, fref: fn(Float, Float) -> Float,
-        x: A, y: B, ulps: f64)
-where
+    f: fn(A, B) -> Df64,
+    fref: fn(Float, Float) -> Float,
+    x: A,
+    y: B,
+    ulps: f64,
+) where
     Float: Assign<f64>,
     Float: Assign<A>,
     Float: Assign<B>,
@@ -89,7 +90,7 @@ where
 
     let diff = Float::with_val(PREC, &zz - &zz_ref);
     let thr = Float::with_val(PREC, EPSILON * ulps * zz.clone().abs());
-    if !(&diff.abs() <= &thr) {
+    if !(diff.abs() <= thr) {
         // Recompute xx and yy
         let xx = Float::with_val(PREC, x);
         let yy = Float::with_val(PREC, y);
@@ -101,6 +102,7 @@ where
              should be   = {}\n\t\
              instead was = {}\n\t\
              deviation   = {:.3} ulps (exceeds threshold of {:.3} ulps)",
-            &xx, &yy, &zz_ref, &zz, &ulpsdiff, &ulps);
+            xx, yy, zz_ref, zz, ulpsdiff, ulps
+        );
     }
 }

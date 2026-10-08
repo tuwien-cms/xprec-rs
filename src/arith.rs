@@ -13,10 +13,9 @@ use super::Df64;
 // Helper functions
 
 // smallest positive number
-const fn tiny() -> f64
-{
+const fn tiny() -> f64 {
     const TINY: f64 = 4.9406564584124654e-324;
-    debug_assert!(TINY != 0.0);
+    const _: () = assert!(TINY != 0.0);
     return TINY;
 }
 
@@ -24,29 +23,26 @@ const fn tiny() -> f64
 // double (op) double -> quad
 
 #[inline]
-pub fn addfast_dd(a: f64, b: f64) -> Df64
-{
+pub fn addfast_dd(a: f64, b: f64) -> Df64 {
     // M. Joldes, et al., ACM Trans. Math. Softw. 44, 1-27 (2018)
     // Algorithm 1: cost 3 flops
     let s = a + b;
     let z = s - a;
     let t = b - z;
-    return Df64 {hi: s, lo: t};
+    return Df64 { hi: s, lo: t };
 }
 
 #[inline]
-pub fn subfast_dd(a: f64, b: f64) -> Df64
-{
+pub fn subfast_dd(a: f64, b: f64) -> Df64 {
     // Algorithm 1 with b -> -b: cost 3 flops
     let s = a - b;
     let z = a - s;
     let t = z - b;
-    return Df64 {hi: s, lo: t};
+    return Df64 { hi: s, lo: t };
 }
 
 #[inline]
-pub fn add_dd(a: f64, b: f64) -> Df64
-{
+pub fn add_dd(a: f64, b: f64) -> Df64 {
     // Algorithm 2: cost 6 flops
     let s = a + b;
     let aprime = s - b;
@@ -54,12 +50,11 @@ pub fn add_dd(a: f64, b: f64) -> Df64
     let delta_a = a - aprime;
     let delta_b = b - bprime;
     let t = delta_a + delta_b;
-    return Df64 {hi: s, lo: t};
+    return Df64 { hi: s, lo: t };
 }
 
 #[inline]
-pub fn sub_dd(a: f64, b: f64) -> Df64
-{
+pub fn sub_dd(a: f64, b: f64) -> Df64 {
     // Algorithm 2: cost 6 flops
     let s = a - b;
     let aprime = s + b;
@@ -67,21 +62,19 @@ pub fn sub_dd(a: f64, b: f64) -> Df64
     let delta_a = a - aprime;
     let delta_b = bprime - b;
     let t = delta_a + delta_b;
-    return Df64 {hi: s, lo: t};
+    return Df64 { hi: s, lo: t };
 }
 
 #[inline]
-pub fn mul_dd(a: f64, b: f64) -> Df64
-{
+pub fn mul_dd(a: f64, b: f64) -> Df64 {
     // Algorithm 3: cost 2 flops
     let pi = a * b;
     let rho = a.mul_add(b, -pi);
-    return Df64 {hi: pi, lo: rho};
+    return Df64 { hi: pi, lo: rho };
 }
 
 #[inline]
-pub fn div_dd(a: f64, b: f64) -> Df64
-{
+pub fn div_dd(a: f64, b: f64) -> Df64 {
     // Cost 3 flops (2 of which divisions), observed error 1 u^2
     // Since we are rounding faithfully, the hi part is exact
     let th = a / b;
@@ -89,18 +82,16 @@ pub fn div_dd(a: f64, b: f64) -> Df64
     // Multiply hi part with b and compare exactly to a to see difference
     let rl = (-b).mul_add(th, a);
     let tl = rl / b;
-    return Df64 {hi: th, lo: tl};
+    return Df64 { hi: th, lo: tl };
 }
 
 #[inline(always)]
-pub fn reciprocal_d(x: f64) -> Df64
-{
+pub fn reciprocal_d(x: f64) -> Df64 {
     return div_dd(1.0, x);
 }
 
 #[inline]
-pub fn sqrt_d(a: f64) -> Df64
-{
+pub fn sqrt_d(a: f64) -> Df64 {
     // Karp, Table II, cost 5 flops, error 1 u^2
     let y0 = a.sqrt();
 
@@ -109,15 +100,17 @@ pub fn sqrt_d(a: f64) -> Df64
     let enumer = (-y0).mul_add(y0, a);
     let denom = tiny() + y0 + y0;
     let delta_y = enumer / denom;
-    return Df64 {hi: y0, lo: delta_y};
+    return Df64 {
+        hi: y0,
+        lo: delta_y,
+    };
 }
 
 // ---------------------------------------------------------------------------
 // quad (op) double -> quad
 
 #[inline]
-pub fn addfast_qd(x: Df64, y: f64) -> Df64
-{
+pub fn addfast_qd(x: Df64, y: f64) -> Df64 {
     // Algorithm 4 modified: cost 7 flops, error 2 u^2
     let s = addfast_dd(x.hi, y);
     let v = x.lo + s.lo;
@@ -125,8 +118,7 @@ pub fn addfast_qd(x: Df64, y: f64) -> Df64
 }
 
 #[inline]
-pub fn subfast_qd(x: Df64, y: f64) -> Df64
-{
+pub fn subfast_qd(x: Df64, y: f64) -> Df64 {
     // Algorithm 4 modified: cost 7 flops, error 2 u^2
     let s = subfast_dd(x.hi, y);
     let v = x.lo + s.lo;
@@ -134,8 +126,7 @@ pub fn subfast_qd(x: Df64, y: f64) -> Df64
 }
 
 #[inline]
-pub fn add_qd(x: Df64, y: f64) -> Df64
-{
+pub fn add_qd(x: Df64, y: f64) -> Df64 {
     // Algorithm 4: cost 10 flops, error 2 u^2
     let s = add_dd(x.hi, y);
     let v = x.lo + s.lo;
@@ -143,8 +134,7 @@ pub fn add_qd(x: Df64, y: f64) -> Df64
 }
 
 #[inline]
-pub fn sub_qd(x: Df64, y: f64) -> Df64
-{
+pub fn sub_qd(x: Df64, y: f64) -> Df64 {
     // Algorithm 4: cost 10 flops, error 2 u^2
     let s = sub_dd(x.hi, y);
     let v = x.lo + s.lo;
@@ -152,8 +142,7 @@ pub fn sub_qd(x: Df64, y: f64) -> Df64
 }
 
 #[inline]
-pub fn mul_qd(x: Df64, y: f64) -> Df64
-{
+pub fn mul_qd(x: Df64, y: f64) -> Df64 {
     // Algorithm 9: cost 6 flops, error 2 u^2
     let c = mul_dd(x.hi, y);
     let cl3 = x.lo.mul_add(y, c.lo);
@@ -161,8 +150,7 @@ pub fn mul_qd(x: Df64, y: f64) -> Df64
 }
 
 #[inline]
-pub fn div_qd(x: Df64, y: f64) -> Df64
-{
+pub fn div_qd(x: Df64, y: f64) -> Df64 {
     // We could have used algorithm 15 here: cost 10 flops, error 3 u^2.
     // It turns out however by using fma, we can reduce this to 7 flops:
     //
@@ -185,21 +173,21 @@ pub fn div_qd(x: Df64, y: f64) -> Df64
 // quad (op) power of two -> quad
 
 #[inline(always)]
-pub fn add_pow2(a: Df64, p: f64) -> Df64
-{
+pub fn add_pow2(a: Df64, p: f64) -> Df64 {
     // This can be added quickly because the mantissa part is zero.
     return addfast_qd(a, p);
 }
 
 #[inline(always)]
-pub fn mul_pow2(a: Df64, p: f64) -> Df64
-{
-    return Df64 {hi: a.hi * p, lo: a.lo * p};
+pub fn mul_pow2(a: Df64, p: f64) -> Df64 {
+    return Df64 {
+        hi: a.hi * p,
+        lo: a.lo * p,
+    };
 }
 
 #[inline(always)]
-pub fn div_pow2(a: Df64, p: f64) -> Df64
-{
+pub fn div_pow2(a: Df64, p: f64) -> Df64 {
     return mul_pow2(a, 1.0 / p);
 }
 
@@ -207,8 +195,7 @@ pub fn div_pow2(a: Df64, p: f64) -> Df64
 // double (op) quad -> quad
 
 #[inline]
-pub fn addfast_dq(x: f64, y: Df64) -> Df64
-{
+pub fn addfast_dq(x: f64, y: Df64) -> Df64 {
     // Algorithm 4 modified: cost 7 flops, error 2 u^2
     let s = addfast_dd(x, y.hi);
     let v = y.lo + s.lo;
@@ -216,8 +203,7 @@ pub fn addfast_dq(x: f64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn subfast_dq(x: f64, y: Df64) -> Df64
-{
+pub fn subfast_dq(x: f64, y: Df64) -> Df64 {
     // Algorithm 4 modified: cost 7 flops, error 2 u^2
     let s = subfast_dd(x, y.hi);
     let v = s.lo - y.lo;
@@ -225,26 +211,22 @@ pub fn subfast_dq(x: f64, y: Df64) -> Df64
 }
 
 #[inline(always)]
-pub fn add_dq(x: f64, y: Df64) -> Df64
-{
+pub fn add_dq(x: f64, y: Df64) -> Df64 {
     return add_qd(y, x);
 }
 
 #[inline(always)]
-pub fn sub_dq(x: f64, y: Df64) -> Df64
-{
+pub fn sub_dq(x: f64, y: Df64) -> Df64 {
     return add_qd(neg_q(y), x);
 }
 
 #[inline(always)]
-pub fn mul_dq(x: f64, y: Df64) -> Df64
-{
+pub fn mul_dq(x: f64, y: Df64) -> Df64 {
     return mul_qd(y, x);
 }
 
 #[inline(always)]
-pub fn div_dq(x: f64, y: Df64) -> Df64
-{
+pub fn div_dq(x: f64, y: Df64) -> Df64 {
     return mul_qd(reciprocal_q(y), x);
 }
 
@@ -252,8 +234,7 @@ pub fn div_dq(x: f64, y: Df64) -> Df64
 // quad (op) quad -> quad
 
 #[inline]
-pub fn addfast_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn addfast_qq(x: Df64, y: Df64) -> Df64 {
     // Algorithm 6: cost 17 flops, error 3 u^2 + 13 u^3
     let s = addfast_dd(x.hi, y.hi);
     let t = add_dd(x.lo, y.lo);
@@ -264,8 +245,7 @@ pub fn addfast_qq(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn subfast_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn subfast_qq(x: Df64, y: Df64) -> Df64 {
     // Algorithm 6: cost 17 flops, error 3 u^2 + 13 u^3
     let s = subfast_dd(x.hi, y.hi);
     let t = sub_dd(x.lo, y.lo);
@@ -276,8 +256,7 @@ pub fn subfast_qq(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn add_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn add_qq(x: Df64, y: Df64) -> Df64 {
     // Algorithm 6: cost 20 flops, error 3 u^2 + 13 u^3
     let s = add_dd(x.hi, y.hi);
     let t = add_dd(x.lo, y.lo);
@@ -288,8 +267,7 @@ pub fn add_qq(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn sub_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn sub_qq(x: Df64, y: Df64) -> Df64 {
     // Algorithm 6: cost 20 flops, error 3 u^2 + 13 u^3
     let s = sub_dd(x.hi, y.hi);
     let t = sub_dd(x.lo, y.lo);
@@ -300,8 +278,7 @@ pub fn sub_qq(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn mul_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn mul_qq(x: Df64, y: Df64) -> Df64 {
     // Algorithm 12: cost 9 flops, error 4 u^2 (corrected)
     let c = mul_dd(x.hi, y.hi);
     let tl0 = x.lo * y.lo;
@@ -312,20 +289,20 @@ pub fn mul_qq(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-pub fn div_qq(x: Df64, y: Df64) -> Df64
-{
+pub fn div_qq(x: Df64, y: Df64) -> Df64 {
     return mul_qq(reciprocal_q(y), x);
 }
 
 #[inline(always)]
-pub fn neg_q(x: Df64) -> Df64
-{
-    return Df64 {hi: -x.hi, lo: -x.lo};
+pub fn neg_q(x: Df64) -> Df64 {
+    return Df64 {
+        hi: -x.hi,
+        lo: -x.lo,
+    };
 }
 
 #[inline]
-pub fn reciprocal_q(y: Df64) -> Df64
-{
+pub fn reciprocal_q(y: Df64) -> Df64 {
     // Part of Algorithm 18: cost 19 flops, error 2.3 u^2
     let th = 1.0 / y.hi;
     let rh = (-y.hi).mul_add(th, 1.0);
@@ -342,8 +319,7 @@ pub fn reciprocal_q(y: Df64) -> Df64
 }
 
 #[inline]
-pub fn sqrt_q(a: Df64) -> Df64
-{
+pub fn sqrt_q(a: Df64) -> Df64 {
     // Karp, Table II, cost 9 flops, error 2 u^2
     // The double result provides a approximation to sqrt(a). It performs
     // all the special-case handling, which is why we defer to it in these
@@ -364,8 +340,7 @@ pub fn sqrt_q(a: Df64) -> Df64
 }
 
 #[inline]
-pub fn square_q(x: Df64) -> Df64
-{
+pub fn square_q(x: Df64) -> Df64 {
     // Simple squaring algorithm
     // Cost 7 flops
     let y = mul_dd(x.hi, x.hi);
@@ -379,8 +354,7 @@ pub fn square_q(x: Df64) -> Df64
 /// intermediate rounding and (2) it must be at least as fast as (x*y)+z.
 /// For double-double, we cannot satisfy both, so we prioritize performance.
 #[inline(always)]
-pub fn mul_add_qq(x: Df64, y: Df64, z: Df64) -> Df64
-{
+pub fn mul_add_qq(x: Df64, y: Df64, z: Df64) -> Df64 {
     add_qq(mul_qq(x, y), z)
 }
 
@@ -388,17 +362,15 @@ pub fn mul_add_qq(x: Df64, y: Df64, z: Df64) -> Df64
 // UNIT TESTS
 
 #[cfg(test)]
-mod test
-{
-    use super::*;
-    use crate::*;
+mod test {
     use super::super::test_utils::*;
+    use super::*;
     use crate::test_utils::PREC;
+    use crate::*;
     use rug::Float;
 
     #[test]
-    fn test_arith_dd()
-    {
+    fn test_arith_dd() {
         let mut x = 10.0;
         while x > 5.0 {
             let mut y = x;
@@ -442,8 +414,7 @@ mod test
     }
 
     #[test]
-    fn test_arith_qd()
-    {
+    fn test_arith_qd() {
         let mut x = Df64::from(10.0);
         while x > Df64::from(5.0) {
             let mut y = x;
@@ -504,15 +475,14 @@ mod test
                 check_binary(div_dq, |x, y| x / y, y.hi, x, 3.0);
                 check_binary(div_dq, |x, y| x / y, y.hi, neg_q(x), 3.0);
 
-                y = mul_qd(y,0.9383);
+                y = mul_qd(y, 0.9383);
             }
             x = mul_qd(x, 0.9933);
         }
     }
 
     #[test]
-    fn test_arith_qq()
-    {
+    fn test_arith_qq() {
         let mut x = Df64::from(10.0);
         while x > Df64::from(5.0) {
             let mut y = x;
@@ -549,17 +519,16 @@ mod test
                 check_binary(div_qq, |x, y| x / y, y, x, 3.0);
                 check_binary(div_qq, |x, y| x / y, neg_q(y), x, 3.0);
 
-                y = mul_qd(y,0.9383);
+                y = mul_qd(y, 0.9383);
             }
             x = mul_qd(x, 0.9933);
         }
     }
 
     #[test]
-    fn test_arith_d()
-    {
+    fn test_arith_d() {
         check_unary(sqrt_d, |x| x.sqrt(), 0.0, 1.0);
-        assert!(checks::is_nan(sqrt_d(-f64::MIN_POSITIVE)));
+        assert!(checks::is_nan(sqrt_d(-<f64>::MIN_POSITIVE)));
 
         let mut x = 1.0;
         while x > 1e-290 {
@@ -579,8 +548,7 @@ mod test
     }
 
     #[test]
-    fn test_arith_q()
-    {
+    fn test_arith_q() {
         check_unary(sqrt_q, |x| x.sqrt(), Df64::ZERO, 1.0);
         assert!(checks::is_nan(sqrt_q(-Df64::MIN_POSITIVE)));
 
@@ -604,23 +572,29 @@ mod test
     }
 
     #[test]
-    fn test_sum_stress(){
-        let u = 0.5 * f64::EPSILON;
+    fn test_sum_stress() {
+        let u = 0.5 * <f64>::EPSILON;
 
-        let x = Df64 {hi: 1.0,  lo: u - u*u}    ;
-        let y = Df64 {hi: 0.5 * (-1.0 + u), lo: u*u * (-0.5 + u)};
+        let x = Df64 {
+            hi: 1.0,
+            lo: u - u * u,
+        };
+        let y = Df64 {
+            hi: 0.5 * (-1.0 + u),
+            lo: u * u * (-0.5 + u),
+        };
         let r: Df64 = x + y;
         let r_ex = Float::with_val(PREC, x) + Float::with_val(PREC, y);
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 3.0 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 3.0 * u * u) * r_ex.clone().abs();
             assert!(diff <= thr, "sum_stress: diff={} thr={}", diff, thr);
         }
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 2.5 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 2.5 * u * u) * r_ex.clone().abs();
             assert!(diff > thr, "sum_stress (neg): diff={} thr={}", diff, thr);
         }
     }
@@ -630,69 +604,81 @@ mod test
         (a as f64) * (2f64).powi(e)
     }
     #[test]
-    fn test_mul_stress(){
-
-
-        let u = 0.5 * f64::EPSILON;
-        let x = Df64 {hi: ldexp_i(2251799825991851, -51), lo: ldexp_i(9007199203085987, -106)};
-        let y = Df64 {hi: ldexp_i(4503599627471459, -52), lo: ldexp_i(4503599627284651, -105)};
+    fn test_mul_stress() {
+        let u = 0.5 * <f64>::EPSILON;
+        let x = Df64 {
+            hi: ldexp_i(2251799825991851, -51),
+            lo: ldexp_i(9007199203085987, -106),
+        };
+        let y = Df64 {
+            hi: ldexp_i(4503599627471459, -52),
+            lo: ldexp_i(4503599627284651, -105),
+        };
 
         let r = x * y;
         let r_ex = Float::with_val(PREC, x) * Float::with_val(PREC, y);
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 4.0 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 4.0 * u * u) * r_ex.clone().abs();
             assert!(diff <= thr, "mul_stress: diff={} thr={}", diff, thr);
         }
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 3.5 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 3.5 * u * u) * r_ex.clone().abs();
             assert!(diff > thr, "mul_stress (neg): diff={} thr={}", diff, thr);
         }
     }
 
     #[test]
-    fn test_divdq_stress(){
-        let u = 0.5 * f64::EPSILON;
-        let x = Df64 {hi: 4588860379563012., lo: ldexp_i(-4474949195791253, -53)};
+    fn test_divdq_stress() {
+        let u = 0.5 * <f64>::EPSILON;
+        let x = Df64 {
+            hi: 4588860379563012.,
+            lo: ldexp_i(-4474949195791253, -53),
+        };
         let y = 4578284000230917.0;
         let r = x / y;
         let r_ex = Float::with_val(PREC, x) / Float::with_val(PREC, y);
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 3.0 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 3.0 * u * u) * r_ex.clone().abs();
             assert!(diff <= thr, "div_stress: diff={} thr={}", diff, thr);
         }
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 2.5 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 2.5 * u * u) * r_ex.clone().abs();
             assert!(diff > thr, "div_stress (neg): diff={} thr={}", diff, thr);
         }
     }
 
     #[test]
-    fn test_divqq_stress(){
-        let u = 0.5 * f64::EPSILON;
-        let x = Df64 {hi: 4528288502329187.0 , lo: ldexp_i(1125391118633487, -51)};
-        let y = Df64 {hi: 4522593432466394.0, lo: ldexp_i(-9006008290016505, -54)};
+    fn test_divqq_stress() {
+        let u = 0.5 * <f64>::EPSILON;
+        let x = Df64 {
+            hi: 4528288502329187.0,
+            lo: ldexp_i(1125391118633487, -51),
+        };
+        let y = Df64 {
+            hi: 4522593432466394.0,
+            lo: ldexp_i(-9006008290016505, -54),
+        };
         let r = x / y;
         let r_ex = Float::with_val(PREC, x) / Float::with_val(PREC, y);
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 6.0 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 6.0 * u * u) * r_ex.clone().abs();
             assert!(diff <= thr, "div_stress: diff={} thr={}", diff, thr);
         }
         {
             let rr = Float::with_val(PREC, r);
             let diff = Float::with_val(PREC, &rr - &r_ex).abs();
-            let thr  = Float::with_val(PREC, 0.9 * u * u) * r_ex.clone().abs();
+            let thr = Float::with_val(PREC, 0.9 * u * u) * r_ex.clone().abs();
             assert!(diff > thr, "div_stress (neg): diff={} thr={}", diff, thr);
         }
     }
-
 }

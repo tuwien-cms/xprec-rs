@@ -10,8 +10,7 @@ use super::roots::{hypot, inv_sqrt};
 
 pub const COSH_MAX: f64 = 710.4758600739439;
 
-pub fn cosh(x: Df64) -> Df64
-{
+pub fn cosh(x: Df64) -> Df64 {
     let xx = abs(x);
     if !(xx.hi <= COSH_MAX) {
         if is_nan(x) {
@@ -37,8 +36,7 @@ pub fn cosh(x: Df64) -> Df64
     return addfast_qq(exp_x_half, exp_mx_half);
 }
 
-pub fn sinh(x: Df64) -> Df64
-{
+pub fn sinh(x: Df64) -> Df64 {
     let xx = abs(x);
     if !(xx.hi <= COSH_MAX) {
         if is_nan(x) {
@@ -77,8 +75,7 @@ pub fn sinh(x: Df64) -> Df64
     return copysign(subfast_qq(exp_x_half, exp_mx_half), x);
 }
 
-pub fn tanh(x: Df64) -> Df64
-{
+pub fn tanh(x: Df64) -> Df64 {
     let xx = abs(x);
     if !(xx.hi <= 36.5) {
         if is_nan(x) {
@@ -100,8 +97,7 @@ pub fn tanh(x: Df64) -> Df64
     return copysign(z / (2.0 + z), x);
 }
 
-pub fn asinh(x: Df64) -> Df64
-{
+pub fn asinh(x: Df64) -> Df64 {
     // Special values: +Inf, -Inf are all preserved
     if !is_finite(x) {
         return x;
@@ -115,7 +111,7 @@ pub fn asinh(x: Df64) -> Df64
         let x0 = sinh(Df64::from(y0));
 
         let delta_y = (x - x0) * inv_sqrt(1.0 + square_q(x0));
-        return addfast_dq(y0, delta_y)
+        return addfast_dq(y0, delta_y);
     }
 
     // Use the definition:
@@ -127,8 +123,7 @@ pub fn asinh(x: Df64) -> Df64
     return copysign(log(arg), x);
 }
 
-pub fn acosh(x: Df64) -> Df64
-{
+pub fn acosh(x: Df64) -> Df64 {
     // Special values: +Inf, -Inf are all preserved
     if !is_finite(x) {
         return x;
@@ -147,8 +142,7 @@ pub fn acosh(x: Df64) -> Df64
     return log(arg);
 }
 
-pub fn atanh(x: Df64) -> Df64
-{
+pub fn atanh(x: Df64) -> Df64 {
     if is_nan(x) {
         return x;
     }
@@ -169,14 +163,13 @@ pub fn atanh(x: Df64) -> Df64
 }
 
 #[cfg(test)]
-mod test{
-    use super::*;
-    use super::super::test_utils::*;
+mod test {
     use super::super::checks::is_infinite;
+    use super::super::test_utils::*;
+    use super::*;
 
     #[test]
-    fn test_cosh()
-    {
+    fn test_cosh() {
         // special values
         assert!(is_infinite(cosh(Df64::from(1000.0))));
         assert!(is_infinite(cosh(Df64::INFINITY)));
@@ -206,8 +199,7 @@ mod test{
     }
 
     #[test]
-    fn test_sinh()
-    {
+    fn test_sinh() {
         // special values
         assert!(is_infinite(sinh(Df64::from(1000.0))));
         assert!(is_infinite(sinh(Df64::INFINITY)));
@@ -238,8 +230,7 @@ mod test{
     }
 
     #[test]
-    fn test_tanh()
-    {
+    fn test_tanh() {
         // special values
         assert!(tanh(Df64::from(1000.0)) == Df64::ONE);
         assert!(tanh(Df64::from(-1000.0)) == Df64::from(-1.0));
@@ -267,9 +258,8 @@ mod test{
         }
     }
 
-        #[test]
-    fn test_arc()
-    {
+    #[test]
+    fn test_arc() {
         // small values
         let mut x = Df64::ONE;
         while x.hi > 1e-290 {
