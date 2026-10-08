@@ -528,7 +528,7 @@ mod test {
     #[test]
     fn test_arith_d() {
         check_unary(sqrt_d, |x| x.sqrt(), 0.0, 1.0);
-        assert!(checks::is_nan(sqrt_d(-f64::MIN_POSITIVE)));
+        assert!(checks::is_nan(sqrt_d(-<f64>::MIN_POSITIVE)));
 
         let mut x = 1.0;
         while x > 1e-290 {
@@ -573,7 +573,7 @@ mod test {
 
     #[test]
     fn test_sum_stress() {
-        let u = 0.5 * f64::EPSILON;
+        let u = 0.5 * <f64>::EPSILON;
 
         let x = Df64 {
             hi: 1.0,
@@ -605,7 +605,7 @@ mod test {
     }
     #[test]
     fn test_mul_stress() {
-        let u = 0.5 * f64::EPSILON;
+        let u = 0.5 * <f64>::EPSILON;
         let x = Df64 {
             hi: ldexp_i(2251799825991851, -51),
             lo: ldexp_i(9007199203085987, -106),
@@ -633,7 +633,7 @@ mod test {
 
     #[test]
     fn test_divdq_stress() {
-        let u = 0.5 * f64::EPSILON;
+        let u = 0.5 * <f64>::EPSILON;
         let x = Df64 {
             hi: 4588860379563012.,
             lo: ldexp_i(-4474949195791253, -53),
@@ -657,7 +657,7 @@ mod test {
 
     #[test]
     fn test_divqq_stress() {
-        let u = 0.5 * f64::EPSILON;
+        let u = 0.5 * <f64>::EPSILON;
         let x = Df64 {
             hi: 4528288502329187.0,
             lo: ldexp_i(1125391118633487, -51),
