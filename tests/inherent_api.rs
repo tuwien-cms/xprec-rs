@@ -131,7 +131,11 @@ fn trigonometric_and_hyperbolic() {
     assert_close(sin, 1.0, 8.0);
     assert!(cos.abs().hi() < 1e-16);
 
-    assert_close(Df64::from(1.0).atan2(Df64::ONE), std::f64::consts::FRAC_PI_4, 8.0);
+    assert_close(
+        Df64::from(1.0).atan2(Df64::ONE),
+        std::f64::consts::FRAC_PI_4,
+        8.0,
+    );
 
     assert_eq!(Df64::ZERO.sinh(), Df64::ZERO);
     assert_close(Df64::ZERO.cosh(), 1.0, 1.0);

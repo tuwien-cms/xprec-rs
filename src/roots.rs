@@ -1,8 +1,7 @@
 use super::Df64;
 use super::arith::{addfast_dd, addfast_qq, mul_pow2, reciprocal_d, sqrt_q, square_q};
 
-pub fn hypot(x: Df64, y: Df64) -> Df64
-{
+pub fn hypot(x: Df64, y: Df64) -> Df64 {
     // XXX unfortunately, rust has no const floats expressions, so we need
     //     to hard-code this here
     const LARGE: f64 = 1.3407807929942597e154;
@@ -37,15 +36,13 @@ pub fn hypot(x: Df64, y: Df64) -> Df64
 }
 
 #[inline]
-fn _hypot(x: Df64, y: Df64) -> Df64
-{
+fn _hypot(x: Df64, y: Df64) -> Df64 {
     let x2 = square_q(x);
     let y2 = square_q(y);
     return sqrt_q(addfast_qq(x2, y2));
 }
 
-pub fn inv_sqrt(x: Df64) -> Df64
-{
+pub fn inv_sqrt(x: Df64) -> Df64 {
     // Use strategy similar to Karp to compute 1/sqrt(x)
     // cost 12 flops (3 of which divisions), observed error 2 u^2
 
@@ -80,24 +77,47 @@ mod test {
     use crate::test_utils::*;
 
     #[test]
-    fn test_hypot()
-    {
+    fn test_hypot() {
         assert!(is_infinite(hypot(Df64::INFINITY, Df64::EPSILON)));
         assert!(is_infinite(hypot(Df64::EPSILON, -Df64::INFINITY)));
         assert!(is_infinite(hypot(Df64::INFINITY, Df64::INFINITY)));
 
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::ONE, Df64::ONE, 1.5);
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::from(3.0), Df64::from(-10000.0), 1.5);
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::from(1e249), Df64::from(1e241), 1.5);
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::from(1e241), Df64::from(-1e249), 1.5);
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::from(1e-251), Df64::from(1e-259), 1.5);
-        check_binary(hypot, |x,y| x.hypot(&y),
-                     Df64::from(-1e-259), Df64::from(1e-248), 1.5);
+        check_binary(hypot, |x, y| x.hypot(&y), Df64::ONE, Df64::ONE, 1.5);
+        check_binary(
+            hypot,
+            |x, y| x.hypot(&y),
+            Df64::from(3.0),
+            Df64::from(-10000.0),
+            1.5,
+        );
+        check_binary(
+            hypot,
+            |x, y| x.hypot(&y),
+            Df64::from(1e249),
+            Df64::from(1e241),
+            1.5,
+        );
+        check_binary(
+            hypot,
+            |x, y| x.hypot(&y),
+            Df64::from(1e241),
+            Df64::from(-1e249),
+            1.5,
+        );
+        check_binary(
+            hypot,
+            |x, y| x.hypot(&y),
+            Df64::from(1e-251),
+            Df64::from(1e-259),
+            1.5,
+        );
+        check_binary(
+            hypot,
+            |x, y| x.hypot(&y),
+            Df64::from(-1e-259),
+            Df64::from(1e-248),
+            1.5,
+        );
 
         let mut x = Df64::from(10.0);
         while x > Df64::from(5.0) {
@@ -112,8 +132,7 @@ mod test {
     }
 
     #[test]
-    fn test_roots_q()
-    {
+    fn test_roots_q() {
         let mut x = Df64::ONE;
         while x > Df64::from(1e-290) {
             check_unary(inv_sqrt, |x| 1.0 / x.sqrt(), x, 2.0);
@@ -126,5 +145,4 @@ mod test {
             x = div_qd(x, 0.992);
         }
     }
-
 }

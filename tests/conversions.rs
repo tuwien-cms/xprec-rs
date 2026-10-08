@@ -58,8 +58,14 @@ fn try_from_round_trips() {
     assert_eq!(u32::try_from(Df64::from(1_000_000u32)).unwrap(), 1_000_000);
     assert_eq!(isize::try_from(Df64::from(-99isize)).unwrap(), -99);
     assert_eq!(usize::try_from(Df64::from(99usize)).unwrap(), 99);
-    assert_eq!(i128::try_from(Df64::from(123_456_789i64)).unwrap(), 123_456_789);
-    assert_eq!(u128::try_from(Df64::from(123_456_789u64)).unwrap(), 123_456_789);
+    assert_eq!(
+        i128::try_from(Df64::from(123_456_789i64)).unwrap(),
+        123_456_789
+    );
+    assert_eq!(
+        u128::try_from(Df64::from(123_456_789u64)).unwrap(),
+        123_456_789
+    );
 }
 
 #[test]

@@ -1,7 +1,6 @@
 use crate::Df64;
 use crate::arith;
 use core::convert::TryFrom;
-use num_traits;
 
 /// Error returned when a `Df64` does not fit into an integer type.
 ///
@@ -9,22 +8,22 @@ use num_traits;
 /// failure is reported as `None` by the `num_traits::ToPrimitive` methods and
 /// by the `try_to_*` functions.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TryFromDf64Error
-{
+pub struct TryFromDf64Error {
     /// The value that is not representable in the target type.
     pub value: Df64,
 }
 
-impl core::fmt::Display for TryFromDf64Error
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-    {
+impl core::fmt::Display for TryFromDf64Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         return write!(
-            f, "{} is out of range for the requested integer type", self.value);
+            f,
+            "{} is out of range for the requested integer type",
+            self.value
+        );
     }
 }
 
-impl std::error::Error for TryFromDf64Error { }
+impl std::error::Error for TryFromDf64Error {}
 
 macro_rules! convert {
     ($fname:ident Df64 $Dest:ident) => {
@@ -34,28 +33,23 @@ macro_rules! convert {
         /// `$Dest::MIN <= x < $Dest::MAX + 1`. In converting, any fractional
         /// part is discarded.
         #[inline]
-        pub fn $fname(x: Df64) -> Option<$Dest>
-        {
+        pub fn $fname(x: Df64) -> Option<$Dest> {
             const LOW: f64 = $Dest::MIN as f64;
             const HIGH: f64 = ($Dest::MAX as f64) + 1.0;
             if x.hi >= LOW && x.hi < HIGH {
-                let xi = unsafe {
-                    x.hi.to_int_unchecked::<$Dest>() +
-                    x.lo.to_int_unchecked::<$Dest>()
-                };
+                let xi =
+                    unsafe { x.hi.to_int_unchecked::<$Dest>() + x.lo.to_int_unchecked::<$Dest>() };
                 return Some(xi);
             } else {
                 return None;
             }
         }
 
-        impl TryFrom<Df64> for $Dest
-        {
+        impl TryFrom<Df64> for $Dest {
             type Error = TryFromDf64Error;
 
             #[inline]
-            fn try_from(x: Df64) -> Result<$Dest, TryFromDf64Error>
-            {
+            fn try_from(x: Df64) -> Result<$Dest, TryFromDf64Error> {
                 return $fname(x).ok_or(TryFromDf64Error { value: x });
             }
         }
@@ -67,24 +61,23 @@ macro_rules! convert {
         /// care to preserve the least significant bits of i64, which are
         /// typically truncated in f64.
         #[inline]
-        pub fn $fname(x: $Src) -> Df64
-        {
+        pub fn $fname(x: $Src) -> Df64 {
             const SIZEOF_SRC: usize = size_of::<$Src>();
             if SIZEOF_SRC == 8 {
                 const HI_HALF: $Src = !(0 as $Src) << (4 * SIZEOF_SRC);
                 const LO_HALF: $Src = !HI_HALF;
-                return arith::addfast_dd(
-                            (x & HI_HALF) as f64, (x & LO_HALF) as f64);
+                return arith::addfast_dd((x & HI_HALF) as f64, (x & LO_HALF) as f64);
             } else {
-                return Df64 {hi: x as f64, lo: 0.0};
+                return Df64 {
+                    hi: x as f64,
+                    lo: 0.0,
+                };
             }
         }
 
-        impl From<$Src> for Df64
-        {
+        impl From<$Src> for Df64 {
             #[inline]
-            fn from(x: $Src) -> Df64
-            {
+            fn from(x: $Src) -> Df64 {
                 return $fname(x);
             }
         }
@@ -131,45 +124,122 @@ impl From<Df64> for f64 {
 
 impl From<f64> for Df64 {
     fn from(src: f64) -> Df64 {
-        Df64 {hi: src, lo: 0.0}
+        Df64 { hi: src, lo: 0.0 }
     }
 }
 
-
 impl num_traits::ToPrimitive for Df64 {
-    #[inline] fn to_isize(&self) -> Option<isize> { return try_to_isize(*self); }
-    #[inline] fn to_i8(&self)    -> Option<i8>    { return try_to_i8(*self); }
-    #[inline] fn to_i16(&self)   -> Option<i16>   { return try_to_i16(*self); }
-    #[inline] fn to_i32(&self)   -> Option<i32>   { return try_to_i32(*self); }
-    #[inline] fn to_i64(&self)   -> Option<i64>   { return try_to_i64(*self); }
-    #[inline] fn to_i128(&self)  -> Option<i128>  { return try_to_i128(*self); }
+    #[inline]
+    fn to_isize(&self) -> Option<isize> {
+        return try_to_isize(*self);
+    }
+    #[inline]
+    fn to_i8(&self) -> Option<i8> {
+        return try_to_i8(*self);
+    }
+    #[inline]
+    fn to_i16(&self) -> Option<i16> {
+        return try_to_i16(*self);
+    }
+    #[inline]
+    fn to_i32(&self) -> Option<i32> {
+        return try_to_i32(*self);
+    }
+    #[inline]
+    fn to_i64(&self) -> Option<i64> {
+        return try_to_i64(*self);
+    }
+    #[inline]
+    fn to_i128(&self) -> Option<i128> {
+        return try_to_i128(*self);
+    }
 
-    #[inline] fn to_usize(&self) -> Option<usize> { return try_to_usize(*self); }
-    #[inline] fn to_u8(&self)    -> Option<u8>    { return try_to_u8(*self); }
-    #[inline] fn to_u16(&self)   -> Option<u16>   { return try_to_u16(*self); }
-    #[inline] fn to_u32(&self)   -> Option<u32>   { return try_to_u32(*self); }
-    #[inline] fn to_u64(&self)   -> Option<u64>   { return try_to_u64(*self); }
-    #[inline] fn to_u128(&self)  -> Option<u128>  { return try_to_u128(*self); }
+    #[inline]
+    fn to_usize(&self) -> Option<usize> {
+        return try_to_usize(*self);
+    }
+    #[inline]
+    fn to_u8(&self) -> Option<u8> {
+        return try_to_u8(*self);
+    }
+    #[inline]
+    fn to_u16(&self) -> Option<u16> {
+        return try_to_u16(*self);
+    }
+    #[inline]
+    fn to_u32(&self) -> Option<u32> {
+        return try_to_u32(*self);
+    }
+    #[inline]
+    fn to_u64(&self) -> Option<u64> {
+        return try_to_u64(*self);
+    }
+    #[inline]
+    fn to_u128(&self) -> Option<u128> {
+        return try_to_u128(*self);
+    }
 
-    #[inline] fn to_f32(&self)   -> Option<f32>   { return Some(self.hi as f32); }
-    #[inline] fn to_f64(&self)   -> Option<f64>   { return Some(self.hi); }
+    #[inline]
+    fn to_f32(&self) -> Option<f32> {
+        return Some(self.hi as f32);
+    }
+    #[inline]
+    fn to_f64(&self) -> Option<f64> {
+        return Some(self.hi);
+    }
 }
 
 impl num_traits::FromPrimitive for Df64 {
-    #[inline] fn from_isize(n: isize) -> Option<Df64> { return Some(from_isize(n)); }
-    #[inline] fn from_i8(n: i8)       -> Option<Df64> { return Some(from_i8(n)); }
-    #[inline] fn from_i16(n: i16)     -> Option<Df64> { return Some(from_i16(n)); }
-    #[inline] fn from_i32(n: i32)     -> Option<Df64> { return Some(from_i32(n)); }
-    #[inline] fn from_i64(n: i64)     -> Option<Df64> { return Some(from_i64(n)); }
+    #[inline]
+    fn from_isize(n: isize) -> Option<Df64> {
+        return Some(from_isize(n));
+    }
+    #[inline]
+    fn from_i8(n: i8) -> Option<Df64> {
+        return Some(from_i8(n));
+    }
+    #[inline]
+    fn from_i16(n: i16) -> Option<Df64> {
+        return Some(from_i16(n));
+    }
+    #[inline]
+    fn from_i32(n: i32) -> Option<Df64> {
+        return Some(from_i32(n));
+    }
+    #[inline]
+    fn from_i64(n: i64) -> Option<Df64> {
+        return Some(from_i64(n));
+    }
 
-    #[inline] fn from_usize(n: usize) -> Option<Df64> { return Some(from_usize(n)); }
-    #[inline] fn from_u8(n: u8)       -> Option<Df64> { return Some(from_u8(n)); }
-    #[inline] fn from_u16(n: u16)     -> Option<Df64> { return Some(from_u16(n)); }
-    #[inline] fn from_u32(n: u32)     -> Option<Df64> { return Some(from_u32(n)); }
-    #[inline] fn from_u64(n: u64)     -> Option<Df64> { return Some(from_u64(n)); }
+    #[inline]
+    fn from_usize(n: usize) -> Option<Df64> {
+        return Some(from_usize(n));
+    }
+    #[inline]
+    fn from_u8(n: u8) -> Option<Df64> {
+        return Some(from_u8(n));
+    }
+    #[inline]
+    fn from_u16(n: u16) -> Option<Df64> {
+        return Some(from_u16(n));
+    }
+    #[inline]
+    fn from_u32(n: u32) -> Option<Df64> {
+        return Some(from_u32(n));
+    }
+    #[inline]
+    fn from_u64(n: u64) -> Option<Df64> {
+        return Some(from_u64(n));
+    }
 
-    #[inline] fn from_f32(n: f32)     -> Option<Df64> { return Some(Df64::from(n as f64)); }
-    #[inline] fn from_f64(n: f64)     -> Option<Df64> { return Some(Df64::from(n)); }
+    #[inline]
+    fn from_f32(n: f32) -> Option<Df64> {
+        return Some(Df64::from(n as f64));
+    }
+    #[inline]
+    fn from_f64(n: f64) -> Option<Df64> {
+        return Some(Df64::from(n));
+    }
 }
 
 impl num_traits::NumCast for Df64 {
@@ -216,7 +286,7 @@ mod test {
         assert_eq!(Df64::from_f64(0.0).unwrap(), Df64::ZERO);
         assert_eq!(Df64::from_f64(1.0).unwrap(), Df64::ONE);
         assert_eq!(Df64::from_f64(-1.0).unwrap(), Df64 { hi: -1.0, lo: 0.0 });
-        
+
         // Test very small numbers
         let small = 1e-10;
         let df64 = Df64::from_f64(small).unwrap();

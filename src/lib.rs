@@ -14,10 +14,9 @@ use std::ops::{Add, Sub};
 
 /// Type for compensated arithmetic.
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
-pub struct Compensated<H, L>
-{
+pub struct Compensated<H, L> {
     hi: H,
-    lo: L
+    lo: L,
 }
 
 impl<H, L> Compensated<H, L> {
@@ -71,7 +70,6 @@ impl<H, L> Compensated<H, L> {
 pub type Df64 = Compensated<f64, f64>;
 
 impl Df64 {
-
     /// Construct new compensated result with zero compensation.
     #[inline(always)]
     pub const fn new(x: f64) -> Df64 {
@@ -86,9 +84,8 @@ impl Df64 {
     #[inline(always)]
     pub const fn new_full(hi: f64, lo: f64) -> Df64 {
         debug_assert!(hi + lo == hi || !hi.is_finite());
-        return Df64 { hi: hi, lo: lo };
+        return Df64 { hi, lo };
     }
-
 }
 
 /// Arithmetic with compensated errors.
@@ -118,8 +115,7 @@ impl Df64 {
 /// rules when it comes to infinities. One usually gets NaN in this case.
 ///
 /// [^1]: J.-M. Muller and L. Rideau, ACM Trans. Math. Softw. 48, 1, 9 (2022).
-pub trait CompensatedArithmetic<T> : From<T> + Into<T>
-{
+pub trait CompensatedArithmetic<T>: From<T> + Into<T> {
     /// type of the compensate.
     type Compensate;
 
@@ -127,7 +123,7 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
     ///
     /// Return the compensate, i.e., the difference of the current value and
     /// its `T` approximation, `self.into<T>()`.
-    fn compensate(self: &Self) -> Self::Compensate;
+    fn compensate(&self) -> Self::Compensate;
 
     /// Add `a` and `b` while compensating exactly for the error.
     ///
@@ -189,7 +185,7 @@ pub trait CompensatedArithmetic<T> : From<T> + Into<T>
 }
 
 /// Addition under the assumption of ordered arguments.
-pub trait AddFast<T = Self> : Add<T> {
+pub trait AddFast<T = Self>: Add<T> {
     /// Add `small` to `self`, assuming `small.abs() <= self.abs()`.
     ///
     /// Add a small value `small` to `self`, assuming that `small` is
@@ -202,7 +198,7 @@ pub trait AddFast<T = Self> : Add<T> {
 }
 
 /// Subtraction under the assumption of ordered arguments.
-pub trait SubFast<T = Self> : Sub<T>{
+pub trait SubFast<T = Self>: Sub<T> {
     /// Subtract `small` from `self`, assuming `small.abs() <= self.abs()`.
     ///
     /// Subtract a small value `small` from `self`, assuming that `small` is

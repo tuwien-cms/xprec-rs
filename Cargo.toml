@@ -34,3 +34,15 @@ approx = "0.5"
 [dev-dependencies]
 rug = "1.28"
 
+
+[lints.clippy]
+# `return x;` is used deliberately: the algorithms follow the form of the
+# published reference implementations (Joldes et al., Karp).
+needless_return = "allow"
+# The named constants are defined here to the full precision of the type they
+# represent, rather than taken from `f64::consts`.
+approx_constant = "allow"
+excessive_precision = "allow"
+# `!(a <= b)` is used to catch NaN as well as an out-of-range value; the
+# suggested `a > b` would let NaN through.
+neg_cmp_op_on_partial_ord = "allow"

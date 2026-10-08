@@ -3,10 +3,10 @@
 // Copyright (C) 2023-2025 Markus Wallerberger and others
 // SPDX-License-Identifier: MIT
 
-use std::num::FpCategory;
-use approx;
 use crate::Df64;
 use crate::arith;
+use approx;
+use std::num::FpCategory;
 
 #[inline]
 pub fn is_finite(x: Df64) -> bool {
@@ -24,8 +24,7 @@ pub fn is_nan(x: Df64) -> bool {
 }
 
 #[inline]
-pub fn is_normal(x: Df64) -> bool
-{
+pub fn is_normal(x: Df64) -> bool {
     // Denormalization is double-double is a bit of a strange concept,
     // since the lo part may be a denormalized number even if the whole
     // number is still "normal".
@@ -33,8 +32,7 @@ pub fn is_normal(x: Df64) -> bool
 }
 
 #[inline]
-pub fn is_subnormal(x: Df64) -> bool
-{
+pub fn is_subnormal(x: Df64) -> bool {
     // Denormalization is double-double is a bit of a strange concept,
     // since the lo part may be a denormalized number even if the whole
     // number is still "normal".
@@ -47,16 +45,14 @@ pub fn is_zero(x: Df64) -> bool {
 }
 
 #[inline]
-pub fn classify(x: Df64) -> FpCategory
-{
+pub fn classify(x: Df64) -> FpCategory {
     // This also works with zero, since that can be determined from the
     // hi part alone
     return x.hi.classify();
 }
 
 #[inline]
-pub fn is_sign_negative(a: Df64) -> bool
-{
+pub fn is_sign_negative(a: Df64) -> bool {
     return a.hi.is_sign_negative();
 }
 
@@ -68,8 +64,7 @@ pub fn is_sign_negative(a: Df64) -> bool
 ///  - by absolute distance: `|a - b| <= atol`
 ///  - by relative distance: `|a - b| <= rtol * max(|a|, |b|)`
 ///
-pub fn isclose_qq(a: Df64, b: Df64, atol: f64, rtol: f64) -> bool
-{
+pub fn isclose_qq(a: Df64, b: Df64, atol: f64, rtol: f64) -> bool {
     if a.hi.abs() > b.hi.abs() {
         let threshold = atol.max(rtol * a.hi.abs());
         let diff = arith::subfast_qq(b, a).hi;
@@ -104,7 +99,10 @@ impl approx::RelativeEq for Df64 {
         // A small multiple of the machine epsilon is the right default here.
         // We scale this by 3 because this is the largest error we observe from
         // any of the arithmetic operations.
-        return Df64 { hi: 3.0 * Df64::EPSILON.hi, lo: 0.0 };
+        return Df64 {
+            hi: 3.0 * Df64::EPSILON.hi,
+            lo: 0.0,
+        };
     }
 
     #[inline(always)]
@@ -130,9 +128,9 @@ impl approx::UlpsEq for Df64 {
 
 #[cfg(test)]
 mod test {
-    use approx::assert_relative_eq;
     use super::*;
     use crate::funcs;
+    use approx::assert_relative_eq;
 
     fn check_class(x: Df64, cat: FpCategory) {
         assert!(is_normal(x) == (cat == FpCategory::Normal));
@@ -153,25 +151,40 @@ mod test {
         // Check min
         check_class(Df64::MIN, FpCategory::Normal);
         check_class((1.0 + Df64::EPSILON) * Df64::MIN, FpCategory::Infinite);
-        check_class((1.0 + Df64::EPSILON/8.0) * Df64::MIN, FpCategory::Normal);
+        check_class((1.0 + Df64::EPSILON / 8.0) * Df64::MIN, FpCategory::Normal);
 
         // Check min exp
-        check_class(funcs::ldexp(Df64::from(1.1), Df64::MIN_EXP), FpCategory::Normal);
-        check_class(funcs::ldexp(Df64::from(0.9), Df64::MIN_EXP), FpCategory::Subnormal);
+        check_class(
+            funcs::ldexp(Df64::from(1.1), Df64::MIN_EXP),
+            FpCategory::Normal,
+        );
+        check_class(
+            funcs::ldexp(Df64::from(0.9), Df64::MIN_EXP),
+            FpCategory::Subnormal,
+        );
 
         // Check max
         check_class(Df64::MAX, FpCategory::Normal);
         check_class((1.0 + Df64::EPSILON) * Df64::MAX, FpCategory::Infinite);
-        check_class((1.0 + Df64::EPSILON/8.0) * Df64::MAX, FpCategory::Normal);
+        check_class((1.0 + Df64::EPSILON / 8.0) * Df64::MAX, FpCategory::Normal);
 
         // Check max exp
-        check_class(funcs::ldexp(Df64::from(0.9), Df64::MAX_EXP), FpCategory::Normal);
+        check_class(
+            funcs::ldexp(Df64::from(0.9), Df64::MAX_EXP),
+            FpCategory::Normal,
+        );
         check_class(funcs::ldexp(Df64::ONE, Df64::MAX_EXP), FpCategory::Infinite);
 
         // Check min positive
         check_class(Df64::MIN_POSITIVE, FpCategory::Normal);
-        check_class((1.0 + f64::EPSILON) * Df64::MIN_POSITIVE, FpCategory::Normal);
-        check_class((1.0 - f64::EPSILON) * Df64::MIN_POSITIVE, FpCategory::Subnormal);
+        check_class(
+            (1.0 + f64::EPSILON) * Df64::MIN_POSITIVE,
+            FpCategory::Normal,
+        );
+        check_class(
+            (1.0 - f64::EPSILON) * Df64::MIN_POSITIVE,
+            FpCategory::Subnormal,
+        );
 
         // Check nan
         check_class(Df64::NAN, FpCategory::Nan);
@@ -184,8 +197,7 @@ mod test {
     }
 
     #[test]
-    fn test_isclose()
-    {
+    fn test_isclose() {
         let zero = Df64::ZERO;
         let one = Df64::ONE;
         assert!(isclose_qq(zero, zero, 0.0, 0.0));
@@ -196,5 +208,4 @@ mod test {
 
         assert_relative_eq!(one, one + 3e-32);
     }
-
 }

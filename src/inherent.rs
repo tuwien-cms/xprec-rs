@@ -3,8 +3,8 @@
 // Copyright (C) 2023-2025 Markus Wallerberger and others
 // SPDX-License-Identifier: MIT
 
-use crate::{arith, checks, circular, consts, exp, funcs, hyperbolic, roots, round};
 use crate::Df64;
+use crate::{arith, checks, circular, consts, exp, funcs, hyperbolic, roots, round};
 
 /// Floating point operations available without importing a trait.
 ///

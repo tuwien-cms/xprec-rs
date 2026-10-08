@@ -37,3 +37,23 @@ jobs:
 
       - name: Test crate
         run: cargo test --verbose
+
+  lint:
+    name: format & clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Install rust
+        run: |
+          rustup update stable && \
+          rustup default stable && \
+          rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings

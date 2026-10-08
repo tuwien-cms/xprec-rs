@@ -25,8 +25,7 @@ use std::ops::{
 ///   - `$op_qd: fn(Df64, f64) -> Df64` ... `$Trait<f64> for Df64`
 ///   - `$op_dq: fn(f64, Df64) -> Df64` ... `$Trait<Df64> for f64`
 ///
-macro_rules! binary_op
-{
+macro_rules! binary_op {
     ($Trait:ident, $func:ident, $op_qq:path, $op_qd:path, $op_dq:path) => {
         // implementation for Df64 (op) Df64
         impl $Trait for Df64 {
@@ -69,8 +68,7 @@ binary_op!(Rem, rem, round::mod_qq, round::mod_qd, round::mod_dq);
 ///   - `$op_qq: fn(Df64, Df64) -> Df64` ... `$Trait for Df64`
 ///   - `$op_qd: fn(Df64, f64) -> Df64` ... `$Trait<f64> for Df64`
 ///
-macro_rules! inplace_op
-{
+macro_rules! inplace_op {
     ($Trait:ident, $func:ident, $op_qq:expr, $op_qd:expr) => {
         impl $Trait for Df64 {
             #[inline]
@@ -100,8 +98,7 @@ inplace_op!(RemAssign, rem_assign, round::mod_qq, round::mod_qd);
 ///
 ///   - `$op_q: fn(Df64) -> Df64` ... `$Trait for Df64`
 ///
-macro_rules! unary_op
-{
+macro_rules! unary_op {
     ($Trait:ident, $func:ident, $op_q:expr) => {
         impl $Trait for Df64 {
             type Output = Df64;
@@ -110,7 +107,7 @@ macro_rules! unary_op
                 return $op_q(self);
             }
         }
-    }
+    };
 }
 
 unary_op!(Neg, neg, arith::neg_q);
@@ -162,8 +159,7 @@ impl CompensatedArithmetic<f64> for Df64 {
     }
 }
 
-macro_rules! binary_op_fast
-{
+macro_rules! binary_op_fast {
     ($Trait:ident, $func:ident, $op_qq:path, $op_qd:path, $op_dq:path) => {
         // implementation for Df64 (op) Df64
         impl $Trait for Df64 {
@@ -187,16 +183,26 @@ macro_rules! binary_op_fast
 }
 
 binary_op_fast!(
-    AddFast, add_fast, arith::addfast_qq, arith::addfast_qd, arith::addfast_dq);
+    AddFast,
+    add_fast,
+    arith::addfast_qq,
+    arith::addfast_qd,
+    arith::addfast_dq
+);
 binary_op_fast!(
-    SubFast, sub_fast, arith::subfast_qq, arith::subfast_qd, arith::subfast_dq);
+    SubFast,
+    sub_fast,
+    arith::subfast_qq,
+    arith::subfast_qd,
+    arith::subfast_dq
+);
 
 // ---------------------------------------------------------------------------
 // NUMERIC TRAITS
 
 impl Zero for Df64 {
     fn zero() -> Df64 {
-        return Df64 {hi: 0.0, lo: 0.0};
+        return Df64 { hi: 0.0, lo: 0.0 };
     }
     fn is_zero(&self) -> bool {
         return self.hi == 0.0;
@@ -205,7 +211,7 @@ impl Zero for Df64 {
 
 impl One for Df64 {
     fn one() -> Df64 {
-        return Df64 {hi: 1.0, lo: 0.0};
+        return Df64 { hi: 1.0, lo: 0.0 };
     }
     fn is_one(&self) -> bool {
         return self.hi == 1.0 && self.lo == 0.0;
@@ -222,9 +228,7 @@ impl Inv for Df64 {
 impl Num for Df64 {
     type FromStrRadixErr = <f64 as Num>::FromStrRadixErr;
 
-    fn from_str_radix(str: &str, radix: u32)
-            -> Result<Self, Self::FromStrRadixErr>
-    {
+    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
         // XXX precision is insufficient
         let x64 = f64::from_str_radix(str, radix)?;
         return Ok(Df64::from(x64));
@@ -232,8 +236,7 @@ impl Num for Df64 {
 }
 
 impl std::fmt::Display for Df64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(hi: {}, lo: {})", self.hi, self.lo)
     }
 }
@@ -789,7 +792,7 @@ macro_rules! impl_superset (
 impl_superset!(f64 as Df64);
 impl_superset!(f32 as Df64);
 
-impl Field for Df64 { }
+impl Field for Df64 {}
 
 impl ComplexField for Df64 {
     type RealField = Df64;
@@ -879,7 +882,7 @@ impl ComplexField for Df64 {
     }
 
     #[inline(always)]
-    fn hypot(self,other:Self) -> Df64 {
+    fn hypot(self, other: Self) -> Df64 {
         return Df64::hypot(self, other);
     }
 
@@ -904,7 +907,7 @@ impl ComplexField for Df64 {
     }
 
     #[inline(always)]
-    fn sin_cos(self) -> (Self,Self) {
+    fn sin_cos(self) -> (Self, Self) {
         return Df64::sin_cos(self);
     }
 
@@ -959,7 +962,7 @@ impl ComplexField for Df64 {
     }
 
     #[inline(always)]
-    fn log(self, base:Df64) -> Self {
+    fn log(self, base: Df64) -> Self {
         return Df64::log(self, base);
     }
 
@@ -1004,17 +1007,17 @@ impl ComplexField for Df64 {
     }
 
     #[inline(always)]
-    fn powi(self,n:i32) -> Self {
+    fn powi(self, n: i32) -> Self {
         return Df64::powi(self, n);
     }
 
     #[inline(always)]
-    fn powf(self,n:Df64) -> Self {
+    fn powf(self, n: Df64) -> Self {
         return Df64::powf(self, n);
     }
 
     #[inline(always)]
-    fn powc(self,n:Self) -> Self {
+    fn powc(self, n: Self) -> Self {
         return Df64::powf(self, n);
     }
 
@@ -1169,16 +1172,14 @@ impl RealField for Df64 {
 // UNIT TESTS
 
 #[cfg(test)]
-mod test
-{
+mod test {
     use super::*;
     use approx::assert_ulps_eq;
     use num_traits::Float;
     use std::num::FpCategory;
 
     #[test]
-    fn test_traits()
-    {
+    fn test_traits() {
         let x = Df64::ONE * 2.0;
         let y = Df64::ONE / 4.0;
         assert_eq!(1.0 + x * y - 2.0, Df64::from(-0.5));
@@ -1187,8 +1188,7 @@ mod test
     // ===== Float trait constant methods (8 methods) =====
 
     #[test]
-    fn test_float_nan()
-    {
+    fn test_float_nan() {
         let nan = <Df64 as Float>::nan();
         assert!(nan.is_nan());
         assert!(!nan.is_finite());
@@ -1196,8 +1196,7 @@ mod test
     }
 
     #[test]
-    fn test_float_infinity()
-    {
+    fn test_float_infinity() {
         let inf = <Df64 as Float>::infinity();
         assert!(inf.is_infinite());
         assert!(!inf.is_finite());
@@ -1212,8 +1211,7 @@ mod test
     }
 
     #[test]
-    fn test_float_zero()
-    {
+    fn test_float_zero() {
         let pos_zero = Df64::ZERO;
         let neg_zero = <Df64 as Float>::neg_zero();
 
@@ -1248,8 +1246,7 @@ mod test
     }
 
     #[test]
-    fn test_float_min_max_values()
-    {
+    fn test_float_min_max_values() {
         let min = <Df64 as Float>::min_value();
         assert!(min.is_finite());
         assert!(min.is_sign_negative());
@@ -1267,8 +1264,7 @@ mod test
     }
 
     #[test]
-    fn test_float_epsilon()
-    {
+    fn test_float_epsilon() {
         let eps = <Df64 as Float>::epsilon();
         assert!(eps.is_finite());
         assert!(eps.is_sign_positive());
@@ -1282,8 +1278,7 @@ mod test
     // ===== Float trait classification methods (8 methods) =====
 
     #[test]
-    fn test_float_is_nan()
-    {
+    fn test_float_is_nan() {
         assert!(<Df64 as Float>::nan().is_nan());
         assert!(!Df64::ZERO.is_nan());
         assert!(!Df64::ONE.is_nan());
@@ -1291,8 +1286,7 @@ mod test
     }
 
     #[test]
-    fn test_float_is_infinite()
-    {
+    fn test_float_is_infinite() {
         assert!(<Df64 as Float>::infinity().is_infinite());
         assert!(<Df64 as Float>::neg_infinity().is_infinite());
         assert!(!Df64::ZERO.is_infinite());
@@ -1301,8 +1295,7 @@ mod test
     }
 
     #[test]
-    fn test_float_is_finite()
-    {
+    fn test_float_is_finite() {
         assert!(Df64::ZERO.is_finite());
         assert!(Df64::ONE.is_finite());
         assert!(Df64::from(1.5).is_finite());
@@ -1313,8 +1306,7 @@ mod test
     }
 
     #[test]
-    fn test_float_is_normal()
-    {
+    fn test_float_is_normal() {
         assert!(Df64::ONE.is_normal());
         assert!(Df64::from(2.5).is_normal());
         assert!(!Df64::ZERO.is_normal());
@@ -1323,8 +1315,7 @@ mod test
     }
 
     #[test]
-    fn test_float_is_subnormal()
-    {
+    fn test_float_is_subnormal() {
         // Normal values are not subnormal
         assert!(!Df64::ONE.is_subnormal());
         assert!(!Df64::from(2.5).is_subnormal());
@@ -1339,18 +1330,19 @@ mod test
     }
 
     #[test]
-    fn test_float_classify()
-    {
+    fn test_float_classify() {
         assert_eq!(<Df64 as Float>::nan().classify(), FpCategory::Nan);
         assert_eq!(<Df64 as Float>::infinity().classify(), FpCategory::Infinite);
-        assert_eq!(<Df64 as Float>::neg_infinity().classify(), FpCategory::Infinite);
+        assert_eq!(
+            <Df64 as Float>::neg_infinity().classify(),
+            FpCategory::Infinite
+        );
         assert_eq!(Df64::ZERO.classify(), FpCategory::Zero);
         assert_eq!(Df64::ONE.classify(), FpCategory::Normal);
     }
 
     #[test]
-    fn test_float_is_sign_positive_negative()
-    {
+    fn test_float_is_sign_positive_negative() {
         assert!(Df64::ONE.is_sign_positive());
         assert!(!Df64::ONE.is_sign_negative());
 
@@ -1373,8 +1365,7 @@ mod test
     // ===== Float trait basic arithmetic (3 methods) =====
 
     #[test]
-    fn test_float_abs()
-    {
+    fn test_float_abs() {
         let x = Df64::from(3.5);
         assert_eq!(Float::abs(x), x);
 
@@ -1398,8 +1389,7 @@ mod test
     }
 
     #[test]
-    fn test_float_signum()
-    {
+    fn test_float_signum() {
         assert_eq!(Float::signum(Df64::from(5.0)), Df64::ONE);
         assert_eq!(Float::signum(Df64::from(-5.0)), -Df64::ONE);
         assert!(Float::signum(<Df64 as Float>::nan()).is_nan());
@@ -1413,8 +1403,7 @@ mod test
     }
 
     #[test]
-    fn test_float_recip()
-    {
+    fn test_float_recip() {
         let two = Df64::from(2.0);
         let half = Df64::from(0.5);
 
@@ -1438,8 +1427,7 @@ mod test
     // ===== Float trait rounding methods (5 methods) =====
 
     #[test]
-    fn test_float_floor()
-    {
+    fn test_float_floor() {
         assert_eq!(Float::floor(Df64::from(3.7)), Df64::from(3.0));
         assert_eq!(Float::floor(Df64::from(3.0)), Df64::from(3.0));
         assert_eq!(Float::floor(Df64::from(-3.7)), Df64::from(-4.0));
@@ -1451,8 +1439,7 @@ mod test
     }
 
     #[test]
-    fn test_float_ceil()
-    {
+    fn test_float_ceil() {
         assert_eq!(Float::ceil(Df64::from(3.2)), Df64::from(4.0));
         assert_eq!(Float::ceil(Df64::from(3.0)), Df64::from(3.0));
         assert_eq!(Float::ceil(Df64::from(-3.2)), Df64::from(-3.0));
@@ -1464,8 +1451,7 @@ mod test
     }
 
     #[test]
-    fn test_float_round()
-    {
+    fn test_float_round() {
         assert_eq!(Float::round(Df64::from(3.4)), Df64::from(3.0));
         assert_eq!(Float::round(Df64::from(3.5)), Df64::from(4.0));
         assert_eq!(Float::round(Df64::from(3.6)), Df64::from(4.0));
@@ -1479,8 +1465,7 @@ mod test
     }
 
     #[test]
-    fn test_float_trunc()
-    {
+    fn test_float_trunc() {
         assert_eq!(Float::trunc(Df64::from(3.7)), Df64::from(3.0));
         assert_eq!(Float::trunc(Df64::from(3.2)), Df64::from(3.0));
         assert_eq!(Float::trunc(Df64::from(-3.7)), Df64::from(-3.0));
@@ -1493,8 +1478,7 @@ mod test
     }
 
     #[test]
-    fn test_float_fract()
-    {
+    fn test_float_fract() {
         // Test positive value: fract(3.7) = 0.7
         let x = Df64::from(3.7);
         let fract = Float::fract(x);
@@ -1524,8 +1508,7 @@ mod test
     // ===== Float trait comparison methods (6 methods) =====
 
     #[test]
-    fn test_float_min()
-    {
+    fn test_float_min() {
         let a = Df64::from(2.0);
         let b = Df64::from(3.0);
         assert_eq!(Float::min(a, b), a);
@@ -1545,12 +1528,11 @@ mod test
         assert_eq!(Float::min(neg_zero, neg_a), neg_a);
         // min between +0.0 and -0.0: IEEE 754 does not distinguish
         let min_zeros = Float::min(pos_zero, neg_zero);
-        assert_eq!(min_zeros, pos_zero);  // Value equality
+        assert_eq!(min_zeros, pos_zero); // Value equality
     }
 
     #[test]
-    fn test_float_max()
-    {
+    fn test_float_max() {
         let a = Df64::from(2.0);
         let b = Df64::from(3.0);
         assert_eq!(Float::max(a, b), b);
@@ -1570,12 +1552,11 @@ mod test
         assert_eq!(Float::max(neg_zero, neg_a), neg_zero);
         // max between +0.0 and -0.0: IEEE 754 does not distinguish
         let max_zeros = Float::max(pos_zero, neg_zero);
-        assert_eq!(max_zeros, pos_zero);  // Value equality
+        assert_eq!(max_zeros, pos_zero); // Value equality
     }
 
     #[test]
-    fn test_float_signed_zero_copysign()
-    {
+    fn test_float_signed_zero_copysign() {
         let one = Df64::ONE;
         let neg_one = -Df64::ONE;
         let pos_zero = Df64::ZERO;
@@ -1599,8 +1580,7 @@ mod test
     }
 
     #[test]
-    fn test_float_clamp()
-    {
+    fn test_float_clamp() {
         let min = Df64::from(2.0);
         let max = Df64::from(5.0);
 
@@ -1619,8 +1599,7 @@ mod test
     }
 
     #[test]
-    fn test_signed_abs_sub()
-    {
+    fn test_signed_abs_sub() {
         // `Signed::abs_sub` is the *positive difference*, not the absolute
         // difference, and has to agree with `Float::abs_sub`; see the note in
         // the implementation for the behaviour change this pins down.
@@ -1639,8 +1618,7 @@ mod test
     }
 
     #[test]
-    fn test_float_abs_sub()
-    {
+    fn test_float_abs_sub() {
         let a = Df64::from(5.0);
         let b = Df64::from(3.0);
         // abs_sub(a, b) = max(a - b, 0) = max(2, 0) = 2
@@ -1659,8 +1637,7 @@ mod test
     }
 
     #[test]
-    fn test_float_mul_add()
-    {
+    fn test_float_mul_add() {
         let a = Df64::from(2.0);
         let b = Df64::from(3.0);
         let c = Df64::from(4.0);
@@ -1679,8 +1656,7 @@ mod test
     }
 
     #[test]
-    fn test_float_signed_zero_arithmetic()
-    {
+    fn test_float_signed_zero_arithmetic() {
         let pos_zero = Df64::ZERO;
         let neg_zero = <Df64 as Float>::neg_zero();
         let one = Df64::ONE;
@@ -1697,7 +1673,7 @@ mod test
         let mul_pos = one * pos_zero;
         let mul_neg = one * neg_zero;
         assert_eq!(mul_pos, pos_zero);
-        assert_eq!(mul_neg, pos_zero);  // Value equality
+        assert_eq!(mul_neg, pos_zero); // Value equality
 
         // Negation of zeros
         let neg_of_pos = -pos_zero;
@@ -1709,7 +1685,7 @@ mod test
         let div_pos = pos_zero / one;
         let div_neg = neg_zero / one;
         assert_eq!(div_pos, pos_zero);
-        assert_eq!(div_neg, pos_zero);  // Value equality
+        assert_eq!(div_neg, pos_zero); // Value equality
 
         // Division by zero returns NaN in current implementation
         // (IEEE 754 specifies infinity, but double-double implementation returns NaN)
@@ -1720,8 +1696,7 @@ mod test
     // ===== Float trait exponential and logarithmic (11 methods) =====
 
     #[test]
-    fn test_float_powi()
-    {
+    fn test_float_powi() {
         // Delegate to exp::powi, detailed precision tests are in exp.rs
         // Here we verify the Float trait correctly delegates
         let two = Df64::from(2.0);
@@ -1740,14 +1715,16 @@ mod test
     }
 
     #[test]
-    fn test_float_powf()
-    {
+    fn test_float_powf() {
         // Delegate to exp::powf, detailed precision tests are in exp.rs
         let two = Df64::from(2.0);
         let three = Df64::from(3.0);
 
         assert_ulps_eq!(Float::powf(two, three), Df64::from(8.0));
-        assert_ulps_eq!(Float::powf(Df64::from(4.0), Df64::from(0.5)), Df64::from(2.0));
+        assert_ulps_eq!(
+            Float::powf(Df64::from(4.0), Df64::from(0.5)),
+            Df64::from(2.0)
+        );
 
         // Signed zero: powf(0, y) is 0 for y > 0 and infinity for y < 0
         let pos_zero = Df64::ZERO;
@@ -1756,8 +1733,7 @@ mod test
     }
 
     #[test]
-    fn test_float_exp()
-    {
+    fn test_float_exp() {
         // Delegate to exp::exp, detailed precision tests are in exp.rs
         // Here we verify the Float trait correctly delegates
         assert_eq!(Float::exp(Df64::ZERO), Df64::ONE);
@@ -1768,8 +1744,7 @@ mod test
     }
 
     #[test]
-    fn test_float_exp2()
-    {
+    fn test_float_exp2() {
         // Delegate to exp::exp2, detailed precision tests are in exp.rs
         assert_eq!(Float::exp2(Df64::ZERO), Df64::ONE);
         assert_ulps_eq!(Float::exp2(Df64::ONE), Df64::from(2.0));
@@ -1783,8 +1758,7 @@ mod test
     }
 
     #[test]
-    fn test_float_ln()
-    {
+    fn test_float_ln() {
         // Delegate to exp::log, detailed precision tests are in exp.rs
         assert_eq!(Float::ln(Df64::ONE), Df64::ZERO);
         assert_ulps_eq!(Float::ln(crate::consts::EULER_E), Df64::ONE);
@@ -1792,16 +1766,20 @@ mod test
     }
 
     #[test]
-    fn test_float_log()
-    {
+    fn test_float_log() {
         // Delegate to exp::log_base, detailed precision tests are in exp.rs
-        assert_ulps_eq!(Float::log(Df64::from(100.0), Df64::from(10.0)), Df64::from(2.0));
-        assert_ulps_eq!(Float::log(Df64::from(8.0), Df64::from(2.0)), Df64::from(3.0));
+        assert_ulps_eq!(
+            Float::log(Df64::from(100.0), Df64::from(10.0)),
+            Df64::from(2.0)
+        );
+        assert_ulps_eq!(
+            Float::log(Df64::from(8.0), Df64::from(2.0)),
+            Df64::from(3.0)
+        );
     }
 
     #[test]
-    fn test_float_log2()
-    {
+    fn test_float_log2() {
         // Delegate to exp::log2, detailed precision tests are in exp.rs
         assert_eq!(Float::log2(Df64::ONE), Df64::ZERO);
         assert_eq!(Float::log2(Df64::from(2.0)), Df64::ONE);
@@ -1810,8 +1788,7 @@ mod test
     }
 
     #[test]
-    fn test_float_log10()
-    {
+    fn test_float_log10() {
         // Delegate to exp::log10, detailed precision tests are in exp.rs
         assert_eq!(Float::log10(Df64::ONE), Df64::ZERO);
         assert_ulps_eq!(Float::log10(Df64::from(10.0)), Df64::ONE);
@@ -1820,8 +1797,7 @@ mod test
     }
 
     #[test]
-    fn test_float_exp_m1()
-    {
+    fn test_float_exp_m1() {
         // Delegate to exp::expm1, detailed precision tests are in exp.rs
         // exp_m1(x) = exp(x) - 1
         assert_eq!(Float::exp_m1(Df64::ZERO), Df64::ZERO);
@@ -1835,8 +1811,7 @@ mod test
     }
 
     #[test]
-    fn test_float_ln_1p()
-    {
+    fn test_float_ln_1p() {
         // Delegate to exp::log1p, detailed precision tests are in exp.rs
         // ln_1p(x) = ln(1 + x)
         assert_eq!(Float::ln_1p(Df64::ZERO), Df64::ZERO);
@@ -1847,8 +1822,7 @@ mod test
     }
 
     #[test]
-    fn test_float_sqrt()
-    {
+    fn test_float_sqrt() {
         // Delegate to arith::sqrt_q, detailed precision tests are in arith.rs
         assert_eq!(Float::sqrt(Df64::ZERO), Df64::ZERO);
         assert_eq!(Float::sqrt(Df64::ONE), Df64::ONE);
@@ -1863,23 +1837,24 @@ mod test
         let pos_zero = Df64::ZERO;
         let neg_zero = <Df64 as Float>::neg_zero();
         assert_eq!(Float::sqrt(pos_zero), pos_zero);
-        assert_eq!(Float::sqrt(neg_zero), pos_zero);  // Value equality
+        assert_eq!(Float::sqrt(neg_zero), pos_zero); // Value equality
         assert!(Float::sqrt(pos_zero).hi.is_sign_positive());
     }
 
     #[test]
     #[should_panic(expected = "not yet implemented")]
-    fn test_float_cbrt_not_implemented()
-    {
+    fn test_float_cbrt_not_implemented() {
         // cbrt is marked as todo!()
         let _ = Float::cbrt(Df64::from(8.0));
     }
 
     #[test]
-    fn test_float_hypot()
-    {
+    fn test_float_hypot() {
         // Delegate to roots::hypot, detailed precision tests are in roots.rs
-        assert_ulps_eq!(Float::hypot(Df64::from(3.0), Df64::from(4.0)), Df64::from(5.0)); // 3-4-5 triangle
+        assert_ulps_eq!(
+            Float::hypot(Df64::from(3.0), Df64::from(4.0)),
+            Df64::from(5.0)
+        ); // 3-4-5 triangle
         assert_eq!(Float::hypot(Df64::ZERO, Df64::from(5.0)), Df64::from(5.0));
         assert_eq!(Float::hypot(Df64::from(5.0), Df64::ZERO), Df64::from(5.0));
     }
@@ -1887,8 +1862,7 @@ mod test
     // ===== Float trait trigonometric functions (8 methods) =====
 
     #[test]
-    fn test_float_sin()
-    {
+    fn test_float_sin() {
         // Delegate to circular::sin, detailed precision tests are in circular.rs
         assert_eq!(Float::sin(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::sin(crate::consts::PI_HALF), Df64::ONE);
@@ -1903,8 +1877,7 @@ mod test
     }
 
     #[test]
-    fn test_float_cos()
-    {
+    fn test_float_cos() {
         // Delegate to circular::cos, detailed precision tests are in circular.rs
         assert_eq!(Float::cos(Df64::ZERO), Df64::ONE);
         assert_ulps_eq!(Float::cos(crate::consts::PI), -Df64::ONE);
@@ -1918,8 +1891,7 @@ mod test
     }
 
     #[test]
-    fn test_float_tan()
-    {
+    fn test_float_tan() {
         // Delegate to circular::tan, detailed precision tests are in circular.rs
         assert_eq!(Float::tan(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::tan(crate::consts::PI_FOURTH), Df64::ONE);
@@ -1934,8 +1906,7 @@ mod test
     }
 
     #[test]
-    fn test_float_asin()
-    {
+    fn test_float_asin() {
         // Delegate to circular::asin, detailed precision tests are in circular.rs
         assert_eq!(Float::asin(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::asin(Df64::ONE), crate::consts::PI_HALF);
@@ -1944,8 +1915,7 @@ mod test
     }
 
     #[test]
-    fn test_float_acos()
-    {
+    fn test_float_acos() {
         // Delegate to circular::acos, detailed precision tests are in circular.rs
         assert_eq!(Float::acos(Df64::ONE), Df64::ZERO);
         assert_ulps_eq!(Float::acos(Df64::ZERO), crate::consts::PI_HALF);
@@ -1954,8 +1924,7 @@ mod test
     }
 
     #[test]
-    fn test_float_atan()
-    {
+    fn test_float_atan() {
         // Delegate to circular::atan, detailed precision tests are in circular.rs
         assert_eq!(Float::atan(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::atan(Df64::ONE), crate::consts::PI_FOURTH);
@@ -1967,8 +1936,7 @@ mod test
     }
 
     #[test]
-    fn test_float_atan2()
-    {
+    fn test_float_atan2() {
         // Delegate to circular::atan2, detailed precision tests are in circular.rs
         assert_ulps_eq!(Float::atan2(Df64::ONE, Df64::ONE), crate::consts::PI_FOURTH);
         assert_ulps_eq!(Float::atan2(Df64::ONE, Df64::ZERO), crate::consts::PI_HALF);
@@ -1991,7 +1959,7 @@ mod test
 
         // atan2(-0, +x) = -0 (value equality with +0)
         let result = Float::atan2(neg_zero, one);
-        assert_eq!(result, pos_zero);  // Value equality
+        assert_eq!(result, pos_zero); // Value equality
 
         // atan2(-0, -x) returns +pi in current implementation
         // (IEEE 754 specifies -pi, but implementation does not distinguish -0)
@@ -2008,8 +1976,7 @@ mod test
     }
 
     #[test]
-    fn test_float_sin_cos()
-    {
+    fn test_float_sin_cos() {
         // Delegate to circular::sincos, detailed precision tests are in circular.rs
         let (s, c) = Float::sin_cos(Df64::ZERO);
         assert_eq!(s, Df64::ZERO);
@@ -2025,8 +1992,7 @@ mod test
     // ===== Float trait hyperbolic functions (6 methods) =====
 
     #[test]
-    fn test_float_sinh()
-    {
+    fn test_float_sinh() {
         // Delegate to hyperbolic::sinh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::sinh(Df64::ZERO), Df64::ZERO);
 
@@ -2040,8 +2006,7 @@ mod test
     }
 
     #[test]
-    fn test_float_cosh()
-    {
+    fn test_float_cosh() {
         // Delegate to hyperbolic::cosh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::cosh(Df64::ZERO), Df64::ONE);
 
@@ -2058,8 +2023,7 @@ mod test
     }
 
     #[test]
-    fn test_float_tanh()
-    {
+    fn test_float_tanh() {
         // Delegate to hyperbolic::tanh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::tanh(Df64::ZERO), Df64::ZERO);
 
@@ -2073,8 +2037,7 @@ mod test
     }
 
     #[test]
-    fn test_float_asinh()
-    {
+    fn test_float_asinh() {
         // Delegate to hyperbolic::asinh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::asinh(Df64::ZERO), Df64::ZERO);
 
@@ -2088,8 +2051,7 @@ mod test
     }
 
     #[test]
-    fn test_float_acosh()
-    {
+    fn test_float_acosh() {
         // Delegate to hyperbolic::acosh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::acosh(Df64::ONE), Df64::ZERO);
 
@@ -2100,8 +2062,7 @@ mod test
     }
 
     #[test]
-    fn test_float_atanh()
-    {
+    fn test_float_atanh() {
         // Delegate to hyperbolic::atanh, detailed precision tests are in hyperbolic.rs
         assert_eq!(Float::atanh(Df64::ZERO), Df64::ZERO);
 
@@ -2116,8 +2077,7 @@ mod test
     // ===== Float trait angle conversion (2 methods) =====
 
     #[test]
-    fn test_float_to_degrees()
-    {
+    fn test_float_to_degrees() {
         // Uses precomputed DEGREES_PER_RADIAN constant
         assert_eq!(Float::to_degrees(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::to_degrees(crate::consts::PI), Df64::from(180.0));
@@ -2126,8 +2086,7 @@ mod test
     }
 
     #[test]
-    fn test_float_to_radians()
-    {
+    fn test_float_to_radians() {
         // Uses precomputed RADIANS_PER_DEGREE constant
         assert_eq!(Float::to_radians(Df64::ZERO), Df64::ZERO);
         assert_ulps_eq!(Float::to_radians(Df64::from(180.0)), crate::consts::PI);
@@ -2136,8 +2095,7 @@ mod test
     }
 
     #[test]
-    fn test_float_const()
-    {
+    fn test_float_const() {
         use num_traits::FloatConst;
         assert_eq!(Df64::E(), consts::EULER_E);
         assert_eq!(Df64::FRAC_1_PI(), consts::ONE_OVER_PI);
@@ -2163,8 +2121,7 @@ mod test
     // ===== Float trait not yet implemented (2 methods) =====
 
     #[test]
-    fn test_float_constants_methods()
-    {
+    fn test_float_constants_methods() {
         // Test that Float trait constant methods match Df64 constants
         assert_eq!(<Df64 as Float>::min_value(), Df64::MIN);
         assert_eq!(<Df64 as Float>::min_positive_value(), Df64::MIN_POSITIVE);
@@ -2174,10 +2131,8 @@ mod test
 
     #[test]
     #[should_panic(expected = "not yet implemented")]
-    fn test_float_integer_decode_not_implemented()
-    {
+    fn test_float_integer_decode_not_implemented() {
         // integer_decode is marked as todo!()
         let _ = <Df64 as Float>::integer_decode(Df64::from(1.5));
     }
-
 }
