@@ -13,7 +13,24 @@ use core::f64;
 use std::ops::{Add, Sub};
 
 /// Type for compensated arithmetic.
+///
+/// The layout is `#[repr(C)]`: `hi` occupies the first field and `lo` the
+/// second, in declaration order and with C's alignment rules.  For the
+/// `Df64 = Compensated<f64, f64>` instantiation this makes the value
+/// interchangeable with `[f64; 2]` and with the conventional
+/// double-double C layout `struct { double hi; double lo; }`, which is what
+/// FFI consumers of extended-precision libraries expect.  Use
+/// [`Compensated::as_parts`] and [`Compensated::from_parts`] rather than
+/// transmuting; they are the supported conversions.
+///
+/// `repr(C)` is a commitment: the field order of every instantiation is
+/// fixed.  For the two-field, same-type case there is no size or alignment
+/// difference against `repr(Rust)`, since no reordering could remove any
+/// padding; for an instantiation whose parts have different alignments it
+/// would cost padding, and for one holding references it would disable the
+/// niche optimisation in `Option<Compensated<..>>`.
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
+#[repr(C)]
 pub struct Compensated<H, L> {
     hi: H,
     lo: L,
@@ -28,6 +45,27 @@ impl<H, L> Compensated<H, L> {
     /// Get the low part of the compensated value
     pub fn lo(self) -> L {
         self.lo
+    }
+
+    /// Split the value into its high and low parts.
+    ///
+    /// This is the supported way to take a compensated value apart for
+    /// storage, serialisation or an FFI boundary; with the `repr(C)` layout
+    /// the returned pair is in the same order as the fields.
+    pub fn as_parts(self) -> (H, L) {
+        (self.hi, self.lo)
+    }
+}
+
+impl<H, L> Compensated<H, L> {
+    /// Reassemble a value from a high and a low part.
+    ///
+    /// The parts are taken as given: this does not renormalise, so
+    /// `from_parts(hi, lo)` followed by [`Compensated::as_parts`] returns the
+    /// arguments unchanged even if `hi` and `lo` overlap.  Use the arithmetic
+    /// operations if a normalised result is wanted.
+    pub const fn from_parts(hi: H, lo: L) -> Self {
+        Self { hi, lo }
     }
 }
 
@@ -235,3 +273,28 @@ mod utils;
 
 #[cfg(test)]
 mod test_utils;
+
+#[cfg(test)]
+mod abi_layout_tests {
+    //! The ABI layout promised by `#[repr(C)]`, asserted where the fields are
+    //! visible.  The integration test in `tests/abi_layout.rs` can only see the
+    //! size, the alignment and the parts accessors.
+    use super::{Compensated, Df64};
+    use core::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn hi_is_first_and_lo_is_second() {
+        assert_eq!(offset_of!(Df64, hi), 0);
+        assert_eq!(offset_of!(Df64, lo), size_of::<f64>());
+        assert_eq!(size_of::<Df64>(), size_of::<[f64; 2]>());
+        assert_eq!(align_of::<Df64>(), align_of::<f64>());
+    }
+
+    #[test]
+    fn the_layout_is_the_generic_rule_not_a_side_effect_of_f64() {
+        // A different instantiation keeps the declared order, and pays the
+        // padding that order costs.
+        assert_eq!(offset_of!(Compensated<u8, f64>, hi), 0);
+        assert_eq!(offset_of!(Compensated<u8, f64>, lo), size_of::<f64>());
+    }
+}
